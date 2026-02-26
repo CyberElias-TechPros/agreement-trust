@@ -1,0 +1,235 @@
+import type { TaskContract, User, Notification, DashboardStats, ContractInteraction, Category } from '@/types/contracts';
+
+export const currentUser: User = {
+  id: 'u1',
+  email: 'alex.morgan@company.com',
+  firstName: 'Alex',
+  lastName: 'Morgan',
+  avatarUrl: '',
+  role: 'manager',
+};
+
+export const users: User[] = [
+  currentUser,
+  { id: 'u2', email: 'sarah.chen@company.com', firstName: 'Sarah', lastName: 'Chen', role: 'executor' },
+  { id: 'u3', email: 'james.wilson@company.com', firstName: 'James', lastName: 'Wilson', role: 'executor' },
+  { id: 'u4', email: 'maria.garcia@company.com', firstName: 'Maria', lastName: 'Garcia', role: 'manager' },
+  { id: 'u5', email: 'david.kim@company.com', firstName: 'David', lastName: 'Kim', role: 'admin' },
+  { id: 'u6', email: 'emma.jones@company.com', firstName: 'Emma', lastName: 'Jones', role: 'executor' },
+];
+
+export const categories: Category[] = [
+  { id: 'c1', name: 'Development', color: '#3B82F6' },
+  { id: 'c2', name: 'Design', color: '#8B5CF6' },
+  { id: 'c3', name: 'Marketing', color: '#F59E0B' },
+  { id: 'c4', name: 'Operations', color: '#10B981' },
+  { id: 'c5', name: 'Research', color: '#EC4899' },
+];
+
+const interactions1: ContractInteraction[] = [
+  { id: 'i1', contractId: 'tc1', author: users[1], interactionType: 'progress_update', content: 'Initial research phase complete. Moving to wireframe designs.', progressPercentage: 30, createdAt: '2024-12-18T10:00:00Z' },
+  { id: 'i2', contractId: 'tc1', author: currentUser, interactionType: 'comment', content: 'Looks great! Please prioritize the mobile views.', createdAt: '2024-12-18T14:00:00Z' },
+  { id: 'i3', contractId: 'tc1', author: users[1], interactionType: 'progress_update', content: 'Wireframes complete for desktop and mobile. Starting high-fidelity designs.', progressPercentage: 55, createdAt: '2024-12-20T09:00:00Z' },
+  { id: 'i4', contractId: 'tc1', author: users[1], interactionType: 'issue_report', content: 'The brand guidelines PDF seems outdated. Could you confirm the primary color palette?', createdAt: '2024-12-21T11:00:00Z' },
+];
+
+export const contracts: TaskContract[] = [
+  {
+    id: 'tc1',
+    contractNumber: 'TCP-2024-00142',
+    title: 'Redesign Customer Dashboard UI',
+    description: 'Complete redesign of the customer-facing dashboard including new data visualization components, improved navigation structure, and responsive mobile layout. Must follow brand guidelines v3.2.',
+    status: 'in_progress',
+    priority: 'high',
+    initiator: currentUser,
+    executor: users[1],
+    participants: [
+      { user: currentUser, role: 'initiator', isLead: false },
+      { user: users[1], role: 'executor', isLead: true },
+    ],
+    category: categories[1],
+    tags: ['ui', 'dashboard', 'redesign'],
+    deadline: '2025-01-15T23:59:59Z',
+    currentVersion: 2,
+    versions: [
+      { id: 'v1', versionNumber: 1, description: 'Initial scope: Redesign dashboard UI', deadline: '2025-01-10T23:59:59Z', priority: 'medium', changedBy: currentUser, changedAt: '2024-12-15T10:00:00Z' },
+      { id: 'v2', versionNumber: 2, description: 'Expanded to include mobile responsive layout', deadline: '2025-01-15T23:59:59Z', priority: 'high', changedBy: currentUser, changedAt: '2024-12-17T14:00:00Z', changeReason: 'Added mobile requirements after stakeholder review' },
+    ],
+    interactions: interactions1,
+    createdAt: '2024-12-15T10:00:00Z',
+    sentAt: '2024-12-15T10:30:00Z',
+    acceptedAt: '2024-12-16T09:00:00Z',
+  },
+  {
+    id: 'tc2',
+    contractNumber: 'TCP-2024-00143',
+    title: 'API Integration for Payment Gateway',
+    description: 'Integrate Stripe payment processing API with our backend services. Include subscription management, invoice generation, and webhook handling.',
+    status: 'submitted',
+    priority: 'critical',
+    initiator: currentUser,
+    executor: users[2],
+    participants: [
+      { user: currentUser, role: 'initiator', isLead: false },
+      { user: users[2], role: 'executor', isLead: true },
+    ],
+    category: categories[0],
+    tags: ['api', 'payments', 'stripe'],
+    deadline: '2025-01-05T23:59:59Z',
+    currentVersion: 1,
+    versions: [
+      { id: 'v3', versionNumber: 1, description: 'Stripe integration', deadline: '2025-01-05T23:59:59Z', priority: 'critical', changedBy: currentUser, changedAt: '2024-12-10T10:00:00Z' },
+    ],
+    interactions: [
+      { id: 'i5', contractId: 'tc2', author: users[2], interactionType: 'submission', content: 'All payment endpoints implemented and tested. Webhook handling verified with Stripe CLI. Full test coverage at 94%.', progressPercentage: 100, createdAt: '2024-12-28T16:00:00Z', statusChangeFrom: 'in_progress', statusChangeTo: 'submitted' },
+    ],
+    createdAt: '2024-12-10T10:00:00Z',
+    sentAt: '2024-12-10T11:00:00Z',
+    acceptedAt: '2024-12-10T15:00:00Z',
+  },
+  {
+    id: 'tc3',
+    contractNumber: 'TCP-2024-00144',
+    title: 'Content Strategy for Q1 Campaign',
+    description: 'Develop comprehensive content strategy for Q1 2025 marketing campaign. Deliverables include content calendar, blog post outlines, and social media plan.',
+    status: 'sent',
+    priority: 'medium',
+    initiator: currentUser,
+    executor: users[5],
+    participants: [
+      { user: currentUser, role: 'initiator', isLead: false },
+      { user: users[5], role: 'executor', isLead: true },
+    ],
+    category: categories[2],
+    tags: ['marketing', 'content', 'q1'],
+    deadline: '2025-01-20T23:59:59Z',
+    currentVersion: 1,
+    versions: [
+      { id: 'v4', versionNumber: 1, description: 'Q1 content strategy', deadline: '2025-01-20T23:59:59Z', priority: 'medium', changedBy: currentUser, changedAt: '2024-12-22T10:00:00Z' },
+    ],
+    interactions: [],
+    createdAt: '2024-12-22T10:00:00Z',
+    sentAt: '2024-12-22T10:30:00Z',
+  },
+  {
+    id: 'tc4',
+    contractNumber: 'TCP-2024-00145',
+    title: 'Security Audit - Authentication Module',
+    description: 'Perform a comprehensive security audit of the authentication module including JWT implementation, session handling, password policies, and 2FA flows.',
+    status: 'approved',
+    priority: 'critical',
+    initiator: users[4],
+    executor: users[2],
+    participants: [
+      { user: users[4], role: 'initiator', isLead: false },
+      { user: users[2], role: 'executor', isLead: true },
+      { user: currentUser, role: 'observer', isLead: false },
+    ],
+    category: categories[0],
+    tags: ['security', 'audit', 'auth'],
+    deadline: '2024-12-20T23:59:59Z',
+    currentVersion: 1,
+    versions: [
+      { id: 'v5', versionNumber: 1, description: 'Auth security audit', deadline: '2024-12-20T23:59:59Z', priority: 'critical', changedBy: users[4], changedAt: '2024-12-01T10:00:00Z' },
+    ],
+    interactions: [
+      { id: 'i6', contractId: 'tc4', author: users[2], interactionType: 'submission', content: 'Audit complete. Found 3 medium vulnerabilities, all patched. Full report attached.', progressPercentage: 100, createdAt: '2024-12-19T16:00:00Z' },
+      { id: 'i7', contractId: 'tc4', author: users[4], interactionType: 'approval', content: 'Excellent work. All findings have been addressed satisfactorily.', createdAt: '2024-12-20T10:00:00Z', statusChangeFrom: 'submitted', statusChangeTo: 'approved' },
+    ],
+    createdAt: '2024-12-01T10:00:00Z',
+    sentAt: '2024-12-01T10:30:00Z',
+    acceptedAt: '2024-12-02T09:00:00Z',
+    completedAt: '2024-12-20T10:00:00Z',
+  },
+  {
+    id: 'tc5',
+    contractNumber: 'TCP-2024-00146',
+    title: 'User Research - Onboarding Flow',
+    description: 'Conduct user research to improve the onboarding experience. Interview 10 users, create journey maps, and deliver actionable recommendations.',
+    status: 'draft',
+    priority: 'low',
+    initiator: currentUser,
+    participants: [
+      { user: currentUser, role: 'initiator', isLead: false },
+    ],
+    category: categories[4],
+    tags: ['research', 'ux', 'onboarding'],
+    deadline: '2025-02-01T23:59:59Z',
+    currentVersion: 1,
+    versions: [
+      { id: 'v6', versionNumber: 1, description: 'Onboarding user research', deadline: '2025-02-01T23:59:59Z', priority: 'low', changedBy: currentUser, changedAt: '2024-12-28T10:00:00Z' },
+    ],
+    interactions: [],
+    createdAt: '2024-12-28T10:00:00Z',
+  },
+  {
+    id: 'tc6',
+    contractNumber: 'TCP-2024-00147',
+    title: 'Database Migration to PostgreSQL 16',
+    description: 'Plan and execute migration from PostgreSQL 14 to 16. Includes performance benchmarking, compatibility testing, and zero-downtime deployment strategy.',
+    status: 'accepted',
+    priority: 'high',
+    initiator: users[4],
+    executor: users[2],
+    participants: [
+      { user: users[4], role: 'initiator', isLead: false },
+      { user: users[2], role: 'executor', isLead: true },
+    ],
+    category: categories[3],
+    tags: ['database', 'migration', 'infrastructure'],
+    deadline: '2025-01-25T23:59:59Z',
+    currentVersion: 1,
+    versions: [
+      { id: 'v7', versionNumber: 1, description: 'PG16 migration', deadline: '2025-01-25T23:59:59Z', priority: 'high', changedBy: users[4], changedAt: '2024-12-20T10:00:00Z' },
+    ],
+    interactions: [],
+    createdAt: '2024-12-20T10:00:00Z',
+    sentAt: '2024-12-20T11:00:00Z',
+    acceptedAt: '2024-12-21T09:00:00Z',
+  },
+  {
+    id: 'tc7',
+    contractNumber: 'TCP-2025-00001',
+    title: 'Mobile App Performance Optimization',
+    description: 'Optimize the mobile application for better performance. Target: reduce load time by 40%, decrease bundle size by 30%, improve Lighthouse score to 90+.',
+    status: 'rejected',
+    priority: 'medium',
+    initiator: currentUser,
+    executor: users[1],
+    participants: [
+      { user: currentUser, role: 'initiator', isLead: false },
+      { user: users[1], role: 'executor', isLead: true },
+    ],
+    category: categories[0],
+    tags: ['mobile', 'performance', 'optimization'],
+    deadline: '2025-01-30T23:59:59Z',
+    currentVersion: 1,
+    versions: [
+      { id: 'v8', versionNumber: 1, description: 'Mobile perf optimization', deadline: '2025-01-30T23:59:59Z', priority: 'medium', changedBy: currentUser, changedAt: '2025-01-02T10:00:00Z' },
+    ],
+    interactions: [
+      { id: 'i8', contractId: 'tc7', author: users[1], interactionType: 'submission', content: 'Completed initial optimization pass. Bundle reduced by 22%, load time improved by 35%.', progressPercentage: 100, createdAt: '2025-01-20T16:00:00Z' },
+      { id: 'i9', contractId: 'tc7', author: currentUser, interactionType: 'rejection', content: 'The targets were not fully met. Bundle size reduction is 22% vs 30% target. Please address the remaining optimizations.', createdAt: '2025-01-21T10:00:00Z', statusChangeFrom: 'submitted', statusChangeTo: 'rejected' },
+    ],
+    createdAt: '2025-01-02T10:00:00Z',
+    sentAt: '2025-01-02T10:30:00Z',
+    acceptedAt: '2025-01-03T09:00:00Z',
+  },
+];
+
+export const notifications: Notification[] = [
+  { id: 'n1', type: 'submission', title: 'Contract Submitted', content: 'James Wilson submitted TCP-2024-00143 for review', contractId: 'tc2', read: false, createdAt: '2024-12-28T16:00:00Z' },
+  { id: 'n2', type: 'progress', title: 'Progress Update', content: 'Sarah Chen updated progress on TCP-2024-00142 to 55%', contractId: 'tc1', read: false, createdAt: '2024-12-20T09:00:00Z' },
+  { id: 'n3', type: 'issue', title: 'Issue Reported', content: 'Sarah Chen reported an issue on TCP-2024-00142', contractId: 'tc1', read: true, createdAt: '2024-12-21T11:00:00Z' },
+  { id: 'n4', type: 'approval', title: 'Contract Approved', content: 'David Kim approved TCP-2024-00145', contractId: 'tc4', read: true, createdAt: '2024-12-20T10:00:00Z' },
+  { id: 'n5', type: 'deadline', title: 'Deadline Approaching', content: 'TCP-2024-00143 is due in 7 days', contractId: 'tc2', read: false, createdAt: '2024-12-29T08:00:00Z' },
+];
+
+export const dashboardStats: DashboardStats = {
+  activeContracts: 4,
+  pendingReview: 1,
+  overdue: 0,
+  completionRate: 78,
+  totalContracts: 7,
+  thisWeekCreated: 2,
+};
