@@ -5,7 +5,6 @@ import {
   LayoutDashboard,
   FileText,
   Send,
-  Clock,
   AlertCircle,
   Archive,
   BarChart3,
@@ -14,14 +13,12 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  Bell,
-  User,
   FileCheck,
 } from 'lucide-react';
 import { UserAvatar } from './UserAvatar';
-import { currentUser } from '@/data/mockData';
 import { Button } from './ui/button';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '@/contexts/AuthContext';
 
 const mainNav = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -41,10 +38,16 @@ export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout, currentOrganization, organizations, setCurrentOrganization } = useAuth();
 
   const isActive = (path: string) => {
     if (path.includes('?')) return location.pathname + location.search === path;
     return location.pathname === path;
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
   };
 
   return (
@@ -148,17 +151,38 @@ export function AppSidebar() {
 
         <div className={cn('flex items-center gap-2.5', collapsed && 'justify-center')}>
           <Link to="/profile" className="shrink-0">
-            <UserAvatar user={currentUser} size="md" />
+            <UserAvatar 
+                user={{
+                  firstName: user?.firstName || 'U',
+                  lastName: user?.lastName || 'ser',
+                  avatarUrl: user?.avatarUrl,
+                } as any} 
+                size="md" 
+              />
           </Link>
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium text-sidebar-accent-foreground truncate">
-                {currentUser.firstName} {currentUser.lastName}
+                {user?.firstName} {user?.lastName}
               </p>
-              <p className="text-[10px] text-sidebar-foreground/50 truncate">{currentUser.email}</p>
+              <p className="text-[10px] text-sidebar-foreground/50 truncate">{user?.email}</p>
             </div>
           )}
         </div>
+
+        {/* Logout button */}
+        <Button
+          variant="ghost"
+          onClick={handleLogout}
+          className={cn(
+            'w-full text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50',
+            collapsed ? 'px-0 justify-center' : 'justify-start'
+          )}
+          size={collapsed ? 'icon' : 'sm'}
+        >
+          <LogOut className="w-4 h-4" />
+          {!collapsed && <span className="ml-2">Logout</span>}
+        </Button>
       </div>
     </motion.aside>
   );

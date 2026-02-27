@@ -4,19 +4,32 @@ import { motion } from 'framer-motion';
 import { FileText, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Register() {
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', orgName: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [step, setStep] = useState<1 | 2>(1);
   const navigate = useNavigate();
+  const { register } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (step === 1) { setStep(2); return; }
+    
     setLoading(true);
-    setTimeout(() => { setLoading(false); navigate('/dashboard'); }, 800);
+    setError('');
+
+    try {
+      await register(form.email, form.password, form.firstName, form.lastName);
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.message || 'Registration failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const update = (key: string, value: string) => setForm({ ...form, [key]: value });
@@ -49,6 +62,12 @@ export default function Register() {
           <h1 className="text-2xl font-bold text-foreground mb-1">Create your account</h1>
           <p className="text-sm text-muted-foreground mb-8">Step {step} of 2 — {step === 1 ? 'Personal info' : 'Organization'}</p>
 
+          {error && (
+            <div className="mb-4 p-3 text-sm text-red-500 bg-red-50 rounded-lg">
+              {error}
+            </div>
+          )}
+
           {/* Progress */}
           <div className="flex gap-2 mb-6">
             <div className="h-1 rounded-full flex-1 bg-primary" />
@@ -75,7 +94,7 @@ export default function Register() {
                 <div>
                   <label className="input-label">Password</label>
                   <div className="relative">
-                    <Input type={showPassword ? 'text' : 'password'} value={form.password} onChange={e => update('password', e.target.value)} required placeholder="Min 12 characters" />
+                    <Input type={showPassword ? 'text' : 'password'} value={form.password} onChange={e => update('password', e.target.value)} required placeholder="Min 8 characters" />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
