@@ -9,8 +9,12 @@ const priorityConfig: Record<ContractPriority, { label: string; className: strin
   critical: { label: 'Critical', className: 'text-destructive', icon: Flame },
 };
 
-export function PriorityBadge({ priority }: { priority: ContractPriority }) {
-  const config = priorityConfig[priority];
+const defaultConfig = { label: 'Unknown', className: 'text-muted-foreground', icon: ArrowDown };
+
+export function PriorityBadge({ priority }: { priority?: ContractPriority }) {
+  const config = priority ? priorityConfig[priority] : defaultConfig;
+  if (!config) return null;
+  
   const Icon = config.icon;
   return (
     <span className={cn('inline-flex items-center gap-1 text-xs font-medium', config.className)}>

@@ -3,14 +3,42 @@ import { AppSidebar } from './AppSidebar';
 import { Bell, Search } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { useState } from 'react';
-import { notifications } from '@/data/mockData';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import api from '@/lib/api';
+
+interface Notification {
+  id: string;
+  title: string;
+  content: string;
+  type: string;
+  read: boolean;
+  contractId?: string;
+  createdAt: string;
+}
 
 export function AppLayout() {
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    loadNotifications();
+  }, []);
+
+  const loadNotifications = async () => {
+    try {
+      const data = await api.getNotifications({ limit: 5 });
+      setNotifications(data.notifications);
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
@@ -61,27 +89,33 @@ export function AppLayout() {
                       </button>
                     </div>
                     <div className="max-h-80 overflow-y-auto custom-scrollbar">
-                      {notifications.slice(0, 5).map((n) => (
-                        <button
-                          key={n.id}
-                          onClick={() => {
-                            setShowNotifications(false);
-                            if (n.contractId) navigate(`/contracts/${n.contractId}`);
-                          }}
-                          className={cn(
-                            'w-full text-left px-4 py-3 hover:bg-secondary/50 transition-colors border-b border-border/50 last:border-0',
-                            !n.read && 'bg-primary/[0.02]'
-                          )}
-                        >
-                          <div className="flex items-start gap-2">
-                            {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />}
-                            <div className="min-w-0">
-                              <p className="text-xs font-semibold text-foreground truncate">{n.title}</p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{n.content}</p>
+                      {loading ? (
+                        <div className="p-4 text-center text-muted-foreground text-sm">Loading...</div>
+                      ) : notifications.length === 0 ? (
+                        <div className="p-4 text-center text-muted-foreground text-sm">No notifications</div>
+                      ) : (
+                        notifications.slice(0, 5).map((n) => (
+                          <button
+                            key={n.id}
+                            onClick={() => {
+                              setShowNotifications(false);
+                              if (n.contractId) navigate(`/contracts/${n.contractId}`);
+                            }}
+                            className={cn(
+                              'w-full text-left px-4 py-3 hover:bg-secondary/50 transition-colors border-b border-border/50 last:border-0',
+                              !n.read && 'bg-primary/[0.02]'
+                            )}
+                          >
+                            <div className="flex items-start gap-2">
+                              {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />}
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-foreground truncate">{n.title}</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{n.content}</p>
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                      ))}
+                          </button>
+                        ))
+                      )}
                     </div>
                   </motion.div>
                 )}

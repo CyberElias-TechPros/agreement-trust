@@ -1,21 +1,62 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Bell, Check, CheckCheck, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { notifications as allNotifications } from '@/data/mockData';
 import { cn } from '@/lib/utils';
+import api from '@/lib/api';
+
+interface Notification {
+  id: string;
+  title: string;
+  content: string;
+  type: string;
+  read: boolean;
+  contractId?: string;
+  createdAt: string;
+}
 
 export default function Notifications() {
-  const [notifications, setNotifications] = useState(allNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    loadNotifications();
+  }, []);
+
+  const loadNotifications = async () => {
+    try {
+      const data = await api.getNotifications();
+      setNotifications(data.notifications);
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filtered = filter === 'unread' ? notifications.filter(n => !n.read) : notifications;
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const markAllRead = () => setNotifications(notifications.map(n => ({ ...n, read: true })));
-  const markRead = (id: string) => setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
+  const markAllRead = async () => {
+    try {
+      await api.markAllNotificationsRead();
+      setNotifications(notifications.map(n => ({ ...n, read: true })));
+    } catch (error) {
+      console.error('Failed to mark all as read:', error);
+    }
+  };
+
+  const markRead = async (id: string) => {
+    try {
+      await api.markNotificationRead(id);
+      setNotifications(notifications.map(n => n.id === id ? { ...n, read: true } : n));
+    } catch (error) {
+      console.error('Failed to mark as read:', error);
+    }
+  };
 
   const typeIcon: Record<string, string> = {
     submission: '📤',
@@ -24,6 +65,19 @@ export default function Notifications() {
     approval: '✅',
     deadline: '⏰',
   };
+
+  if (loading) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <div className="page-header">
+          <div>
+            <h1 className="page-title">Notifications</h1>
+            <p className="page-subtitle">Loading...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto">

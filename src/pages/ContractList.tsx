@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, Filter, Plus, ArrowUpDown, Grid3X3, List } from 'lucide-react';
@@ -8,25 +8,69 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusBadge } from '@/components/StatusBadge';
 import { PriorityBadge } from '@/components/PriorityBadge';
 import { UserAvatar } from '@/components/UserAvatar';
-import { contracts, categories, currentUser } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
+import api from '@/lib/api';
 import type { ContractStatus } from '@/types/contracts';
 import { cn } from '@/lib/utils';
 
+interface Contract {
+  id: string;
+  contractNumber: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  deadline?: string;
+  category?: { id: string; name: string; color: string };
+  executor?: { id: string; firstName: string; lastName: string };
+  initiator: { id: string; firstName: string; lastName: string };
+  tags: string[];
+  createdAt: string;
+}
+
 export default function ContractList() {
+  const { user, organizations } = useAuth();
   const [searchParams] = useSearchParams();
   const filterParam = searchParams.get('filter');
   
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [sortBy, setSortBy] = useState<'date' | 'deadline' | 'priority'>('date');
 
+  const organizationId = organizations?.[0]?.id;
+
+  useEffect(() => {
+    if (organizationId) {
+      loadContracts();
+    }
+  }, [organizationId, statusFilter, priorityFilter]);
+
+  const loadContracts = async () => {
+    if (!organizationId) return;
+    try {
+      const params: any = {};
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (priorityFilter !== 'all') params.priority = priorityFilter;
+      if (search) params.search = search;
+      
+      const data = await api.getContracts(organizationId, params);
+      setContracts(data.contracts);
+    } catch (error) {
+      console.error('Failed to load contracts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filtered = useMemo(() => {
     let result = [...contracts];
 
     // Apply URL filter
-    if (filterParam === 'created') result = result.filter(c => c.initiator.id === currentUser.id);
+    if (filterParam === 'created') result = result.filter(c => c.initiator.id === user?.id);
     if (filterParam === 'review') result = result.filter(c => c.status === 'submitted');
     if (filterParam === 'overdue') result = result.filter(c => c.deadline && new Date(c.deadline) < new Date() && !['approved', 'archived'].includes(c.status));
     if (filterParam === 'archived') result = result.filter(c => c.status === 'archived');
@@ -34,23 +78,19 @@ export default function ContractList() {
     // Search
     if (search) {
       const s = search.toLowerCase();
-      result = result.filter(c => c.title.toLowerCase().includes(s) || c.contractNumber.toLowerCase().includes(s) || c.tags.some(t => t.includes(s)));
+      result = result.filter(c => c.title.toLowerCase().includes(s) || c.contractNumber.toLowerCase().includes(s));
     }
-
-    // Status filter
-    if (statusFilter !== 'all') result = result.filter(c => c.status === statusFilter);
-    if (priorityFilter !== 'all') result = result.filter(c => c.priority === priorityFilter);
 
     // Sort
     if (sortBy === 'date') result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     if (sortBy === 'deadline') result.sort((a, b) => (a.deadline || '').localeCompare(b.deadline || ''));
     if (sortBy === 'priority') {
-      const order = { critical: 0, high: 1, medium: 2, low: 3 };
-      result.sort((a, b) => order[a.priority] - order[b.priority]);
+      const order: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+      result.sort((a, b) => (order[a.priority] || 3) - (order[b.priority] || 3));
     }
 
     return result;
-  }, [search, statusFilter, priorityFilter, sortBy, filterParam]);
+  }, [contracts, search, statusFilter, priorityFilter, sortBy, filterParam, user]);
 
   const pageTitle = filterParam === 'created' ? 'Created by Me' : filterParam === 'review' ? 'Awaiting Review' : filterParam === 'overdue' ? 'Overdue' : filterParam === 'archived' ? 'Archived' : 'All Contracts';
 
@@ -73,7 +113,13 @@ export default function ContractList() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search by title, ID, or tag..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-secondary/50 border-0" />
+            <Input 
+              placeholder="Search by title, ID, or tag..." 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+              onKeyDown={e => e.key === 'Enter' && loadContracts()}
+              className="pl-9 bg-secondary/50 border-0" 
+            />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[150px] bg-secondary/50 border-0"><SelectValue placeholder="Status" /></SelectTrigger>
@@ -118,7 +164,11 @@ export default function ContractList() {
       </div>
 
       {/* Results */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="glass-card p-12 text-center">
+          <p className="text-muted-foreground">Loading contracts...</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <p className="text-muted-foreground mb-4">No contracts match your filters.</p>
           <Link to="/contracts/new">
@@ -149,10 +199,10 @@ export default function ContractList() {
                     </div>
                     <p className="text-sm font-medium text-foreground truncate">{c.title}</p>
                   </div>
-                  <StatusBadge status={c.status} />
-                  <div>{c.executor ? <UserAvatar user={c.executor} size="sm" showName /> : <span className="text-xs text-muted-foreground">Unassigned</span>}</div>
+                  <StatusBadge status={c.status as ContractStatus} />
+                  <div>{c.executor ? <UserAvatar user={{ id: c.executor.id, email: '', firstName: c.executor.firstName, lastName: c.executor.lastName, role: 'executor' }} size="sm" showName /> : <span className="text-xs text-muted-foreground">Unassigned</span>}</div>
                   <span className="text-xs text-muted-foreground">{c.deadline ? new Date(c.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
-                  <PriorityBadge priority={c.priority} />
+                  <PriorityBadge priority={c.priority as any} />
                 </Link>
               </motion.div>
             ))}
@@ -165,14 +215,14 @@ export default function ContractList() {
               <Link to={`/contracts/${c.id}`} className="glass-card-hover p-5 block">
                 <div className="flex items-center justify-between mb-3">
                   <span className="font-mono text-[11px] text-muted-foreground">{c.contractNumber}</span>
-                  <StatusBadge status={c.status} />
+                  <StatusBadge status={c.status as ContractStatus} />
                 </div>
                 <h3 className="text-sm font-semibold text-foreground mb-2 line-clamp-2">{c.title}</h3>
                 <p className="text-xs text-muted-foreground line-clamp-2 mb-4">{c.description}</p>
                 <div className="flex items-center justify-between pt-3 border-t border-border">
                   <div className="flex items-center gap-2">
-                    {c.executor && <UserAvatar user={c.executor} size="sm" />}
-                    <PriorityBadge priority={c.priority} />
+                    {c.executor && <UserAvatar user={{ id: c.executor.id, email: '', firstName: c.executor.firstName, lastName: c.executor.lastName, role: 'executor' }} size="sm" />}
+                    <PriorityBadge priority={c.priority as any} />
                   </div>
                   <span className="text-[11px] text-muted-foreground">
                     {c.deadline ? new Date(c.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No deadline'}

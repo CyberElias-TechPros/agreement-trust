@@ -294,7 +294,7 @@ class ApiClient {
 
   async markNotificationRead(notificationId: string) {
     return this.request<{ notification: any }>(`/notifications/${notificationId}/read`, {
-      method: 'PATCH',
+      method: 'POST',
     });
   }
 
@@ -302,16 +302,6 @@ class ApiClient {
     return this.request<{ message: string }>('/notifications/read-all', {
       method: 'POST',
     });
-  }
-
-  async deleteNotification(notificationId: string) {
-    return this.request<{ message: string }>(`/notifications/${notificationId}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async getUnreadNotificationCount() {
-    return this.request<{ count: number }>('/notifications/unread-count');
   }
 
   // Categories
@@ -340,14 +330,12 @@ class ApiClient {
   }
 
   // Users
-  async searchUsers(organizationId: string, query: string) {
-    return this.request<{ users: any[] }>(
-      `/organizations/${organizationId}/users/search?q=${encodeURIComponent(query)}`
-    );
+  async getOrganizationUsers(organizationId: string) {
+    return this.request<{ users: any[] }>(`/organizations/${organizationId}/users`);
   }
 
-  async getUser(organizationId: string, userId: string) {
-    return this.request<{ user: any }>(`/organizations/${organizationId}/users/${userId}`);
+  async searchUsers(organizationId: string, query: string) {
+    return this.request<{ users: any[] }>(`/organizations/${organizationId}/users/search?q=${encodeURIComponent(query)}`);
   }
 }
 

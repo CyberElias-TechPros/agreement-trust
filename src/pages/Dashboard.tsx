@@ -65,9 +65,10 @@ export default function Dashboard() {
 
     const fetchData = async () => {
       try {
+        const orgId = currentOrganization?.id || '1';
         const [analyticsData, contractsData, notificationsData] = await Promise.all([
-          api.getOrganizationAnalytics(currentOrganization.id),
-          api.getContracts(currentOrganization.id, { limit: 5 }),
+          api.getOrganizationAnalytics(orgId),
+          api.getContracts(orgId, { limit: 5 }),
           api.getNotifications({ limit: 5 }),
         ]);
 

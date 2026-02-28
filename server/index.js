@@ -1,7 +1,8 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
-import config from './config/index.js';
+import config, { getMongoUri, setNextMongoUri } from './config/index.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -50,22 +51,48 @@ app.use('/api/v1/organizations/:organizationId/users', authenticate, userRoutes)
 app.use(notFound);
 app.use(errorHandler);
 
-// Connect to MongoDB and start server
-const startServer = async () => {
-  try {
-    await mongoose.connect(config.mongoUri);
-    console.log('Connected to MongoDB');
+// Connect to MongoDB with fallback
+const connectWithRetry = async () => {
+  let connected = false;
+  let attempts = 0;
+  const maxAttempts = 3;
 
-    app.listen(config.port, () => {
-      console.log(`Server running on port ${config.port}`);
-      console.log(`Health check: http://localhost:${config.port}/health`);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
+  while (!connected && attempts < maxAttempts) {
+    try {
+      console.log(`Attempting MongoDB connection (attempt ${attempts + 1}/${maxAttempts})...`);
+      console.log(`URI: ${getMongoUri().substring(0, 50)}...`);
+      
+      await mongoose.connect(getMongoUri());
+      connected = true;
+      console.log('Connected to MongoDB');
+    } catch (error) {
+      attempts++;
+      console.error(`MongoDB connection failed (attempt ${attempts}):`, error.message);
+      
+      if (attempts < maxAttempts) {
+        const hasMore = setNextMongoUri();
+        if (!hasMore) {
+          console.error('All MongoDB connection attempts failed');
+          break;
+        }
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
   }
+
+  if (!connected) {
+    console.error('Failed to connect to MongoDB after all attempts');
+  }
+
+  // Start server regardless
+  const port = config.port;
+  app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+    console.log(`Health check: http://localhost:${port}/health`);
+  });
 };
 
-startServer();
+connectWithRetry();
 
 export default app;

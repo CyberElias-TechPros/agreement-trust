@@ -1,21 +1,94 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Mail, Lock, Shield, Key, Camera } from 'lucide-react';
+import { User, Mail, Lock, Shield, Key, Camera, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserAvatar } from '@/components/UserAvatar';
-import { currentUser } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
+import api from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Profile() {
+  const { user, refreshUser } = useAuth();
   const [form, setForm] = useState({
-    firstName: currentUser.firstName,
-    lastName: currentUser.lastName,
-    email: currentUser.email,
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
+    email: user?.email || '',
   });
+  const [loading, setLoading] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const { toast } = useToast();
 
   const update = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }));
+
+  const handleSaveProfile = async () => {
+    setLoading(true);
+    try {
+      await api.updateProfile({
+        firstName: form.firstName,
+        lastName: form.lastName,
+      });
+      await refreshUser();
+      toast({
+        title: 'Profile updated',
+        description: 'Your profile has been updated successfully.',
+      });
+    } catch (error: any) {
+      console.error('Failed to update profile:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to update profile',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'New passwords do not match',
+      });
+      return;
+    }
+    if (passwordForm.newPassword.length < 8) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Password must be at least 8 characters',
+      });
+      return;
+    }
+    setPasswordLoading(true);
+    try {
+      await api.changePassword(passwordForm.currentPassword, passwordForm.newPassword);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      toast({
+        title: 'Password changed',
+        description: 'Your password has been updated successfully.',
+      });
+    } catch (error: any) {
+      console.error('Failed to change password:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to change password',
+      });
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -39,14 +112,14 @@ export default function Profile() {
               <h3 className="section-title">Avatar</h3>
               <div className="flex items-center gap-4">
                 <div className="relative">
-                  <UserAvatar user={currentUser} size="lg" />
+                  <UserAvatar user={user || { id: '', email: '', firstName: '', lastName: '', role: 'executor' }} size="lg" />
                   <button className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center shadow-md">
                     <Camera className="w-3 h-3 text-primary-foreground" />
                   </button>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-foreground">{currentUser.firstName} {currentUser.lastName}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{currentUser.role}</p>
+                  <p className="text-sm font-medium text-foreground">{user?.firstName} {user?.lastName}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
                 </div>
               </div>
             </div>
@@ -66,9 +139,15 @@ export default function Profile() {
               </div>
               <div>
                 <label className="input-label">Email</label>
-                <Input type="email" value={form.email} onChange={e => update('email', e.target.value)} />
+                <Input type="email" value={form.email} onChange={e => update('email', e.target.value)} disabled />
               </div>
-              <Button className="gradient-hero text-primary-foreground border-0">Save Changes</Button>
+              <Button 
+                className="gradient-hero text-primary-foreground border-0" 
+                onClick={handleSaveProfile}
+                disabled={loading}
+              >
+                {loading ? 'Saving...' : 'Save Changes'}
+              </Button>
             </div>
           </motion.div>
         </TabsContent>
@@ -79,17 +158,39 @@ export default function Profile() {
               <h3 className="section-title flex items-center gap-2"><Lock className="w-4 h-4" /> Change Password</h3>
               <div>
                 <label className="input-label">Current Password</label>
-                <Input type="password" placeholder="••••••••" />
+                <Input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="input-label">New Password</label>
-                <Input type="password" placeholder="Min 12 characters" />
+                <Input 
+                  type="password" 
+                  placeholder="Min 8 characters" 
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                />
               </div>
               <div>
                 <label className="input-label">Confirm New Password</label>
-                <Input type="password" placeholder="••••••••" />
+                <Input 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                />
               </div>
-              <Button className="gradient-hero text-primary-foreground border-0">Update Password</Button>
+              <Button 
+                className="gradient-hero text-primary-foreground border-0"
+                onClick={handleChangePassword}
+                disabled={passwordLoading || !passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
+              >
+                {passwordLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Update Password
+              </Button>
             </div>
 
             <div className="glass-card p-6 space-y-5">
@@ -99,7 +200,10 @@ export default function Profile() {
                   <p className="text-sm font-medium text-foreground">Enable 2FA</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Add an extra layer of security to your account</p>
                 </div>
-                <Switch />
+                <Switch 
+                  checked={twoFactorEnabled}
+                  onCheckedChange={setTwoFactorEnabled}
+                />
               </div>
             </div>
 

@@ -5,6 +5,30 @@ import { asyncHandler } from '../middleware/errorHandler.js';
 
 const router = express.Router();
 
+// Get all users in organization
+router.get('/:organizationId', authenticate, asyncHandler(async (req, res) => {
+  const { organizationId } = req.params;
+
+  const { Membership } = await import('../models/index.js');
+  
+  // Get all members in the organization
+  const memberships = await Membership.find({ 
+    organization: organizationId,
+    status: 'active',
+  }).populate('user', 'firstName lastName email avatarUrl role').lean();
+
+  const users = memberships.map(m => ({
+    id: m.user._id,
+    firstName: m.user.firstName,
+    lastName: m.user.lastName,
+    email: m.user.email,
+    avatarUrl: m.user.avatarUrl,
+    role: m.role,
+  }));
+
+  res.json({ users });
+}));
+
 // Search users in organization
 router.get('/:organizationId/search', authenticate, asyncHandler(async (req, res) => {
   const { organizationId } = req.params;
