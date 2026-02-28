@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import type { UserRole } from '@/types/contracts';
 
 interface Member {
   id: string;
@@ -97,6 +98,29 @@ export default function Settings() {
       title: 'Preference saved',
       description: 'Your notification preference has been updated.',
     });
+  };
+
+  const handleInvite = async () => {
+    if (!organizationId || !inviteEmail) return;
+    setInviteLoading(true);
+    try {
+      await api.inviteMember(organizationId, inviteEmail, inviteRole);
+      setInviteEmail('');
+      loadMembers();
+      toast({
+        title: 'Invitation sent',
+        description: `Invitation sent to ${inviteEmail}`,
+      });
+    } catch (error: any) {
+      console.error('Failed to invite member:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error.message || 'Failed to invite member',
+      });
+    } finally {
+      setInviteLoading(false);
+    }
   };
 
   const handleUpdateRole = async (memberId: string, role: string) => {
@@ -243,7 +267,7 @@ export default function Settings() {
                   {members.map((member) => (
                     <div key={member.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
                       <div className="flex items-center gap-3">
-                        <UserAvatar user={{ id: member.user.id, email: member.user.email, firstName: member.user.firstName, lastName: member.user.lastName, role: member.role }} size="sm" showName />
+                        <UserAvatar user={{ id: member.user.id, email: member.user.email, firstName: member.user.firstName, lastName: member.user.lastName, role: member.role as UserRole }} size="sm" showName />
                         <div>
                           <p className="text-xs text-muted-foreground">{member.user.email}</p>
                         </div>

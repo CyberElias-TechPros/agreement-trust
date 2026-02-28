@@ -305,7 +305,7 @@ export default function ContractDetail() {
             {/* Add Comment */}
             <div className="p-4 border-t border-border">
               <div className="flex gap-3">
-                <UserAvatar user={user || { id: '', email: '', firstName: '', lastName: '', role: 'executor' as UserRole }} size="sm" />
+                <UserAvatar user={user || { id: '', email: '', firstName: '', lastName: '', role: 'executor' }} size="sm" />
                 <div className="flex-1">
                   <Textarea
                     placeholder="Add a comment..."

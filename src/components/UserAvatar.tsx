@@ -1,8 +1,8 @@
 import { cn } from '@/lib/utils';
-import type { User } from '@/types/contracts';
+import type { User, UserRole } from '@/types/contracts';
 
 interface UserAvatarProps {
-  user: User;
+  user: Partial<User> & { firstName?: string; lastName?: string; id?: string; email?: string; role?: UserRole };
   size?: 'sm' | 'md' | 'lg';
   showName?: boolean;
 }
