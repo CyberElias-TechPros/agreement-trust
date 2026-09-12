@@ -35,7 +35,7 @@ Everything works in the demo: create contracts, run the state machine, post inte
 | Layer | Technology |
 | --- | --- |
 | Frontend | React 18 · TypeScript · Vite 5 · Tailwind CSS · shadcn/ui · framer-motion |
-| Routing / data | react-router-dom · TanStack Query |
+| Routing / data | react-router-dom · SWR-style custom API client with demo fallback |
 | Backend API | Node.js · Express · Mongoose (MongoDB) |
 | Auth | JWT (access + rotating refresh tokens) · bcrypt (cost 12) |
 | Tests | Vitest + Testing Library |
@@ -130,6 +130,7 @@ npm test
 ```
 
 - **Domain** — state machine transitions (valid + invalid), analytics consistency, audit/interaction side effects, seed integrity
+- **Demo API integration** — sign-in, full contract lifecycle (draft → sent → in_progress → submitted → approved), analytics agreement, observer participants
 - **UI** — status/priority badges, logo, reveal, landing smoke tests (sections render, the seal interaction works), auth + 404 pages render
 
 ## SEO & accessibility
