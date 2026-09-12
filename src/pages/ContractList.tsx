@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, Filter, Plus, ArrowUpDown, Grid3X3, List } from 'lucide-react';
@@ -10,23 +10,11 @@ import { PriorityBadge } from '@/components/PriorityBadge';
 import { UserAvatar } from '@/components/UserAvatar';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/api';
+import type { ApiContract } from '@/types/api';
 import type { ContractStatus, ContractPriority } from '@/types/contracts';
 import { cn } from '@/lib/utils';
 
-interface Contract {
-  id: string;
-  contractNumber: string;
-  title: string;
-  description: string;
-  status: string;
-  priority: string;
-  deadline?: string;
-  category?: { id: string; name: string; color: string };
-  executor?: { id: string; firstName: string; lastName: string };
-  initiator: { id: string; firstName: string; lastName: string };
-  tags: string[];
-  createdAt: string;
-}
+type Contract = ApiContract;
 
 export default function ContractList() {
   const { user, organizations } = useAuth();
@@ -43,13 +31,8 @@ export default function ContractList() {
 
   const organizationId = organizations?.[0]?.id;
 
-  useEffect(() => {
-    if (organizationId) {
-      loadContracts();
-    }
-  }, [organizationId, statusFilter, priorityFilter]);
 
-  const loadContracts = async () => {
+  const loadContracts = useCallback(async () => {
     if (!organizationId) return;
     try {
       const params: { status?: string; priority?: string; search?: string } = {};
@@ -64,7 +47,13 @@ export default function ContractList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [organizationId, statusFilter, priorityFilter, search]);
+
+  useEffect(() => {
+    if (organizationId) {
+      loadContracts();
+    }
+  }, [organizationId, loadContracts]);
 
   const filtered = useMemo(() => {
     let result = [...contracts];
@@ -90,7 +79,7 @@ export default function ContractList() {
     }
 
     return result;
-  }, [contracts, search, statusFilter, priorityFilter, sortBy, filterParam, user]);
+  }, [contracts, search, sortBy, filterParam, user]);
 
   const pageTitle = filterParam === 'created' ? 'Created by Me' : filterParam === 'review' ? 'Awaiting Review' : filterParam === 'overdue' ? 'Overdue' : filterParam === 'archived' ? 'Archived' : 'All Contracts';
 

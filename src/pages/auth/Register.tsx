@@ -40,7 +40,7 @@ export default function Register() {
     setLoading(true);
     setError("");
     try {
-      await register(form.email, form.password, form.firstName, form.lastName);
+      await register(form.email, form.password, form.firstName, form.lastName, form.orgName.trim());
       navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");

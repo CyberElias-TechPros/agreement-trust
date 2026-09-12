@@ -1,10 +1,11 @@
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 interface StatsCardProps {
   title: string;
-  value: string | number;
+  value: ReactNode;
   icon: LucideIcon;
   trend?: { value: number; label: string };
   variant?: "default" | "primary" | "success" | "warning" | "danger";

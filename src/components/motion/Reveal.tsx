@@ -9,7 +9,6 @@ interface RevealProps {
   blur?: boolean;
   once?: boolean;
   amount?: number;
-  as?: "div" | "section" | "span" | "li" | "header" | "figure";
 }
 
 /**

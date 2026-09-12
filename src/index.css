@@ -159,6 +159,12 @@
     scroll-behavior: smooth;
   }
 
+  /* Anchor targets clear the fixed navigation */
+  section[id],
+  [id="cta"] {
+    scroll-margin-top: 88px;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;

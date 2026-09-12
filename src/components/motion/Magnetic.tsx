@@ -31,7 +31,7 @@ export function Magnetic({ children, className, strength = 0.35, style, onClick,
   const springY = useSpring(y, { stiffness: 260, damping: 18, mass: 0.6 });
   const transform = useMotionTemplate`translate3d(${springX}px, ${springY}px, 0)`;
 
-  const handleMove = (e: React.MouseEvent) => {
+  const handleMove = (e: React.PointerEvent) => {
     if (reduce || e.pointerType !== "mouse" || !ref.current) return;
     const rect = ref.current.getBoundingClientRect();
     x.set((e.clientX - rect.left - rect.width / 2) * strength);
@@ -46,7 +46,7 @@ export function Magnetic({ children, className, strength = 0.35, style, onClick,
   return (
     <motion.div
       ref={ref}
-      onMouseMove={handleMove}
+      onPointerMove={handleMove}
       onMouseLeave={handleLeave}
       style={{ ...style, transform, display: "inline-block" }}
       className={className}

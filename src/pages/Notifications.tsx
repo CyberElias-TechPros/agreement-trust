@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Bell, Check, CheckCheck, Filter } from 'lucide-react';
@@ -22,11 +22,8 @@ export default function Notifications() {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    loadNotifications();
-  }, []);
 
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
     try {
       const data = await api.getNotifications();
       setNotifications(data.notifications);
@@ -35,7 +32,11 @@ export default function Notifications() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
 
   const filtered = filter === 'unread' ? notifications.filter(n => !n.read) : notifications;
   const unreadCount = notifications.filter(n => !n.read).length;

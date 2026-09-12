@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, FileText, Users, Calendar, Tag, Upload, X } from 'lucide-react';
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/api';
+import type { ApiUser } from '@/types/api';
 import type { ContractPriority } from '@/types/contracts';
 
 const steps = [
@@ -18,13 +19,7 @@ const steps = [
   { label: 'Review', icon: Tag },
 ];
 
-interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: string;
-}
+type User = ApiUser;
 
 interface Category {
   id: string;
@@ -54,13 +49,7 @@ export default function CreateContract() {
     tags: '',
   });
 
-  useEffect(() => {
-    if (organizationId) {
-      loadData();
-    }
-  }, [organizationId]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!organizationId) return;
     try {
       const [usersData, categoriesData] = await Promise.all([
@@ -74,7 +63,13 @@ export default function CreateContract() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (organizationId) {
+      loadData();
+    }
+  }, [organizationId, loadData]);
 
   const update = (key: keyof typeof form, value: string | string[]) => setForm(prev => ({ ...prev, [key]: value }));
   const canProceed = step === 0 ? form.title && form.description : step === 1 ? form.executorId : true;

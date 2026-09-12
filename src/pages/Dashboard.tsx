@@ -21,6 +21,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import type { ContractPriority, ContractStatus } from "@/types/contracts";
+import type { ApiContract } from "@/types/api";
 
 interface DashboardStats {
   totalContracts: number;
@@ -28,23 +29,13 @@ interface DashboardStats {
   pendingReview: number;
   overdue: number;
   completionRate: number;
-  completed: number;
+  completed?: number;
+  completedThisMonth?: number;
+  pending?: number;
+  thisWeekCreated?: number;
 }
 
-interface ContractData {
-  id: string;
-  contractNumber: string;
-  title: string;
-  status: string;
-  currentDeadline?: string;
-  currentPriority: string;
-  progress?: number;
-  initiator?: { firstName: string; lastName: string };
-  responsibleExecutor?: { firstName: string; lastName: string; avatarUrl?: string };
-  category?: { name: string; color: string };
-  createdAt: string;
-  updatedAt: string;
-}
+type ContractData = ApiContract;
 
 interface NotificationData {
   id: string;

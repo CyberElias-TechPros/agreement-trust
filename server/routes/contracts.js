@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { Contract, ContractVersion, ContractParticipant, ContractInteraction, Notification, AuditLog, Category, User } from '../models/index.js';
 import { authenticate, canPerformAction } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { isId } from '../utils/validate.js';
 
 const router = express.Router();
 
@@ -78,7 +79,7 @@ router.get('/', authenticate, asyncHandler(async (req, res) => {
 // Create contract
 router.post('/', authenticate, asyncHandler(async (req, res) => {
   const { organizationId } = req.params;
-  const { title, description, deadline, priority, categoryId, executorId, tags, attachments } = req.body;
+  const { title, description, deadline, priority, categoryId, executorId, observerIds, tags, attachments } = req.body;
 
   const { Membership } = await import('../models/index.js');
   const membership = await Membership.findOne({
@@ -89,6 +90,37 @@ router.post('/', authenticate, asyncHandler(async (req, res) => {
 
   if (!membership || !canPerformAction(membership.role, 'create', 'contract')) {
     return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+
+  // Validation
+  if (!title || typeof title !== 'string' || title.trim().length === 0) {
+    return res.status(400).json({ error: 'Validation failed', details: ['title is required'] });
+  }
+  if (!description || typeof description !== 'string' || description.trim().length === 0) {
+    return res.status(400).json({ error: 'Validation failed', details: ['description is required'] });
+  }
+  if (deadline && isNaN(Date.parse(deadline))) {
+    return res.status(400).json({ error: 'Validation failed', details: ['deadline must be a valid date'] });
+  }
+  if (priority && !['low', 'medium', 'high', 'critical'].includes(priority)) {
+    return res.status(400).json({ error: 'Validation failed', details: ['priority must be one of low, medium, high, critical'] });
+  }
+  if (observerIds !== undefined && (!Array.isArray(observerIds) || observerIds.some((id) => typeof id !== 'string'))) {
+    return res.status(400).json({ error: 'Validation failed', details: ['observerIds must be an array of user ids'] });
+  }
+
+  // Observers must be active members of the organization
+  const observerList = (observerIds || []).filter((id) => id !== executorId);
+  if (observerList.length > 0) {
+    const observerMemberships = await Membership.find({
+      user: { $in: observerList },
+      organization: organizationId,
+      status: 'active',
+    }).select('user');
+    const validObserverIds = observerMemberships.map((m) => String(m.user));
+    if (validObserverIds.length !== new Set(observerList).size) {
+      return res.status(400).json({ error: 'Validation failed', details: ['every observer must be an active member of the organization'] });
+    }
   }
 
   // Create contract
@@ -131,6 +163,16 @@ router.post('/', authenticate, asyncHandler(async (req, res) => {
       role: 'executor',
       isLead: true,
       status: 'pending',
+    });
+  }
+
+  for (const observerId of observerList) {
+    participants.push({
+      contract: contract._id,
+      user: observerId,
+      role: 'observer',
+      isLead: false,
+      status: 'active',
     });
   }
 
@@ -224,7 +266,29 @@ router.get('/:contractId', authenticate, asyncHandler(async (req, res) => {
 // Update contract (creates new version)
 router.patch('/:contractId', authenticate, asyncHandler(async (req, res) => {
   const { organizationId, contractId } = req.params;
-  const { title, description, deadline, priority, categoryId, tags, changeReason } = req.body;
+  const { title, description, deadline, priority, categoryId, tags, changeReason } = req.body || {};
+
+  if (!isId(contractId)) {
+    return res.status(400).json({ error: 'Validation failed', details: ['Invalid contractId'] });
+  }
+  if (title !== undefined && (typeof title !== 'string' || title.trim().length === 0)) {
+    return res.status(400).json({ error: 'Validation failed', details: ['title must be a non-empty string'] });
+  }
+  if (description !== undefined && (typeof description !== 'string' || description.trim().length === 0)) {
+    return res.status(400).json({ error: 'Validation failed', details: ['description must be a non-empty string'] });
+  }
+  if (deadline !== undefined && deadline !== null && isNaN(Date.parse(deadline))) {
+    return res.status(400).json({ error: 'Validation failed', details: ['deadline must be a valid date'] });
+  }
+  if (priority !== undefined && !['low', 'medium', 'high', 'critical'].includes(priority)) {
+    return res.status(400).json({ error: 'Validation failed', details: ['priority must be one of low, medium, high, critical'] });
+  }
+  if (tags !== undefined && (!Array.isArray(tags) || tags.some((t) => typeof t !== 'string'))) {
+    return res.status(400).json({ error: 'Validation failed', details: ['tags must be an array of strings'] });
+  }
+  if (changeReason !== undefined && (typeof changeReason !== 'string' || changeReason.length > 2000)) {
+    return res.status(400).json({ error: 'Validation failed', details: ['changeReason must be a string of at most 2000 characters'] });
+  }
 
   const { Membership } = await import('../models/index.js');
   const membership = await Membership.findOne({

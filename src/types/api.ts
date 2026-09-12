@@ -106,6 +106,9 @@ export interface ApiAnalytics {
   };
   contractsByStatus: Record<string, number>;
   recentContracts: ApiContract[];
+  weeklyActivity?: { week: string; created: number; completed: number }[];
+  sealedPerMonth?: { month: string; sealed: number }[];
+  teamPerformance?: { name: string; completed: number; avgDays: number; onTime: number }[];
 }
 
 export interface ApiNotification {

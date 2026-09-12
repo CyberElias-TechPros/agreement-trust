@@ -10,6 +10,7 @@ import type {
   ApiPagination,
   ApiTokens,
   ApiUser,
+  ApiVersion,
   LoginResponse,
   MeResponse,
   RegisterResponse,
@@ -117,15 +118,15 @@ class ApiClient {
 
   /* ---------- auth ---------- */
 
-  async register(email: string, password: string, firstName: string, lastName: string): Promise<RegisterResponse> {
+  async register(email: string, password: string, firstName: string, lastName: string, organizationName?: string): Promise<RegisterResponse> {
     if (this.demoMode) {
-      const data = await demoApi.register(email, password, firstName, lastName);
+      const data = await demoApi.register(email, password, firstName, lastName, organizationName);
       this.setAccessToken(data.accessToken);
       return data as unknown as RegisterResponse;
     }
     const data = await this.request<RegisterResponse>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, password, firstName, lastName }),
+      body: JSON.stringify({ email, password, firstName, lastName, organizationName }),
     });
     this.setAccessToken(data.accessToken);
     return data;
@@ -277,14 +278,14 @@ class ApiClient {
   async getContract(
     organizationId: string,
     contractId: string
-  ): Promise<{ contract: ApiContract; participants: unknown[]; versions: unknown[]; interactions: ApiInteraction[] }> {
+  ): Promise<{ contract: ApiContract; participants: unknown[]; versions: ApiVersion[]; interactions: ApiInteraction[] }> {
     if (this.demoMode) return demoApi.getContract(organizationId, contractId) as unknown as Promise<{
       contract: ApiContract;
       participants: unknown[];
-      versions: unknown[];
+      versions: ApiVersion[];
       interactions: ApiInteraction[];
     }>;
-    return this.request<{ contract: ApiContract; participants: unknown[]; versions: unknown[]; interactions: ApiInteraction[] }>(
+    return this.request<{ contract: ApiContract; participants: unknown[]; versions: ApiVersion[]; interactions: ApiInteraction[] }>(
       `/organizations/${organizationId}/contracts/${contractId}`
     );
   }
@@ -298,6 +299,7 @@ class ApiClient {
       priority?: string;
       categoryId?: string;
       executorId?: string;
+      observerIds?: string[];
       tags?: string[];
     }
   ): Promise<{ contract: ApiContract }> {
@@ -409,7 +411,7 @@ class ApiClient {
   async createInteraction(
     organizationId: string,
     contractId: string,
-    data: { interactionType: string; content: string; structuredData?: unknown; progressPercentage?: number; attachments?: unknown[] }
+    data: { interactionType: string; content: string; structuredData?: Record<string, unknown>; progressPercentage?: number; attachments?: unknown[] }
   ): Promise<{ interaction: ApiInteraction }> {
     if (this.demoMode) return demoApi.createInteraction(organizationId, contractId, data) as unknown as Promise<{ interaction: ApiInteraction }>;
     return this.request<{ interaction: ApiInteraction }>(

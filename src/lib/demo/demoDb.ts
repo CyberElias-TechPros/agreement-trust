@@ -104,6 +104,7 @@ export interface DemoContract {
   progress: number;
   initiatorId: string;
   responsibleExecutorId?: string;
+  observerIds?: string[];
   categoryId?: string;
   tags: string[];
   createdAt: string;
@@ -204,6 +205,7 @@ interface SeedContract {
   priority: DemoContract["currentPriority"];
   initiator: string;
   executor?: string;
+  observerIds?: string[];
   category?: string;
   tags: string[];
   deadline?: string;
@@ -227,6 +229,7 @@ const CONTRACTS: SeedContract[] = [
     priority: "high",
     initiator: "u1",
     executor: "u2",
+    observerIds: ["u6"],
     category: "c1",
     tags: ["ui", "dashboard", "redesign"],
     deadline: daysAhead(6),
@@ -246,6 +249,7 @@ const CONTRACTS: SeedContract[] = [
     priority: "critical",
     initiator: "u1",
     executor: "u3",
+    observerIds: ["u5"],
     category: "c2",
     tags: ["payments", "api", "stripe"],
     deadline: daysAhead(1),
@@ -341,6 +345,7 @@ const CONTRACTS: SeedContract[] = [
     priority: "medium",
     initiator: "u1",
     executor: "u3",
+    observerIds: ["u5"],
     category: "c2",
     tags: ["mobile", "performance"],
     deadline: daysAgo(60),
@@ -563,6 +568,83 @@ export function serializeContract(db: DemoDbShape, c: DemoContract) {
   };
 }
 
+/** Weekly activity (last 8 weeks) + sealed-per-month + team performance,
+ *  computed from the real records — same shapes as the server analytics. */
+function computeTimelines(db: DemoDbShape, contracts: DemoContract[]) {
+  const eightWeeksAgo = new Date();
+  eightWeeksAgo.setHours(0, 0, 0, 0);
+  eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 7 * 8);
+
+  const weeklyActivity = [];
+  for (let i = 7; i >= 0; i--) {
+    const start = new Date(eightWeeksAgo);
+    start.setDate(start.getDate() + i * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    weeklyActivity.push({
+      week: start.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      created: contracts.filter((c) => {
+        const t = new Date(c.createdAt);
+        return t >= start && t < end;
+      }).length,
+      completed: contracts.filter((c) => {
+        const t = c.completedAt ? new Date(c.completedAt) : null;
+        return t && t >= start && t < end;
+      }).length,
+    });
+  }
+
+  const sealedPerMonth = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    const start = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    const end = new Date(d.getFullYear(), d.getMonth() - i + 1, 1);
+    sealedPerMonth.push({
+      month: start.toLocaleDateString("en-US", { month: "short" }),
+      sealed: contracts.filter((c) => {
+        const t = c.approvedAt ? new Date(c.approvedAt) : null;
+        return t && t >= start && t < end;
+      }).length,
+    });
+  }
+
+  const byExecutor = new Map<string, { name: string; completed: number; totalDays: number; onTime: number; withDeadline: number }>();
+  for (const c of contracts) {
+    const executorId = c.responsibleExecutorId;
+    if (!executorId) continue;
+    const executor = userById(db, executorId);
+    if (!executor) continue;
+    if (!byExecutor.has(executorId)) {
+      byExecutor.set(executorId, {
+        name: `${executor.firstName} ${executor.lastName}`.trim(),
+        completed: 0,
+        totalDays: 0,
+        onTime: 0,
+        withDeadline: 0,
+      });
+    }
+    const row = byExecutor.get(executorId)!;
+    if (c.approvedAt) {
+      row.completed += 1;
+      if (c.acceptedAt) {
+        row.totalDays += Math.max(0, Math.round((new Date(c.approvedAt).getTime() - new Date(c.acceptedAt).getTime()) / 86400000));
+      }
+      if (c.currentDeadline) {
+        row.withDeadline += 1;
+        if (new Date(c.approvedAt) <= new Date(c.currentDeadline)) row.onTime += 1;
+      }
+    }
+  }
+  const teamPerformance = [...byExecutor.values()].map((row) => ({
+    name: row.name,
+    completed: row.completed,
+    avgDays: row.completed ? Math.round((row.totalDays / row.completed) * 10) / 10 : 0,
+    onTime: row.withDeadline ? Math.round((row.onTime / row.withDeadline) * 100) : 0,
+  }));
+
+  return { weeklyActivity, sealedPerMonth, teamPerformance };
+}
+
 export function computeAnalytics(db: DemoDbShape, orgId: string) {
   const contracts = db.contracts.filter((c) => c.orgId === orgId);
   const byStatus: Record<string, number> = {};
@@ -584,6 +666,8 @@ export function computeAnalytics(db: DemoDbShape, orgId: string) {
     (c) => new Date(c.createdAt).getTime() > nowMs - 7 * 86400000
   );
 
+  const { weeklyActivity, sealedPerMonth, teamPerformance } = computeTimelines(db, contracts);
+
   return {
     stats: {
       totalContracts: contracts.length,
@@ -603,6 +687,9 @@ export function computeAnalytics(db: DemoDbShape, orgId: string) {
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       .slice(0, 8)
       .map((c) => serializeContract(db, c)),
+    weeklyActivity,
+    sealedPerMonth,
+    teamPerformance,
   };
 }
 

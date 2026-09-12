@@ -76,7 +76,7 @@ function serializeInteraction(db: DemoDbShape, ix: (typeof db.interactions)[numb
 export class DemoApi {
   /* ---------- auth ---------- */
 
-  async register(email: string, password: string, firstName: string, lastName: string) {
+  async register(email: string, password: string, firstName: string, lastName: string, organizationName?: string) {
     await delay(500);
     const db = getDb();
     const existing = db.users.find((u) => u.email === email.toLowerCase());
@@ -92,7 +92,7 @@ export class DemoApi {
     };
     const org = {
       id: uid("org"),
-      name: `${firstName}'s Organization`,
+      name: organizationName?.trim() ? organizationName.trim() : `${firstName}'s Organization`,
       slug: `${firstName.toLowerCase()}${lastName.toLowerCase()}-${Date.now()}`,
       planType: "free" as const,
     };
@@ -262,12 +262,13 @@ export class DemoApi {
       if (db.memberships.some((m) => m.orgId === organizationId && m.userId === existing.id)) {
         throw new Error("This person is already a member");
       }
+      const roleTyped = role as DemoMembership["role"];
       mutate((d) => {
         d.memberships.push({
           id: uid("m"),
           userId: existing.id,
           orgId: organizationId,
-          role,
+          role: roleTyped,
           status: "active",
           joinedAt: isoNow(),
         });
@@ -289,12 +290,13 @@ export class DemoApi {
     let membership: { id: string; role: string } | undefined;
     mutate((d) => {
       d.users.push(newUser);
+      const roleTyped = role as DemoMembership["role"];
       const m = {
         id: uid("m"),
         userId: newUser.id,
         orgId: organizationId,
-        role,
-        status: "pending",
+        role: roleTyped,
+        status: "pending" as const,
         joinedAt: isoNow(),
       };
       d.memberships.push(m);
@@ -378,6 +380,7 @@ export class DemoApi {
       ...(contract.responsibleExecutorId
         ? [{ user: publicUser(db, contract.responsibleExecutorId), role: "executor", isLead: true }]
         : []),
+      ...(contract.observerIds || []).map((id) => ({ user: publicUser(db, id), role: "observer", isLead: false })),
     ];
     return { contract: serializeContract(db, contract), participants, versions, interactions };
   }
@@ -391,6 +394,7 @@ export class DemoApi {
       priority?: string;
       categoryId?: string;
       executorId?: string;
+      observerIds?: string[];
       tags?: string[];
     }
   ) {
@@ -413,6 +417,7 @@ export class DemoApi {
         progress: 0,
         initiatorId: d.sessionUserId || DEMO_USER_ID,
         responsibleExecutorId: data.executorId,
+        observerIds: (data.observerIds || []).filter((id) => id !== data.executorId),
         categoryId: data.categoryId,
         tags: data.tags || [],
         createdAt: isoNow(),

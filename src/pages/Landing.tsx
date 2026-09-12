@@ -779,13 +779,13 @@ export default function Landing() {
                     <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                   </Link>
                 </Magnetic>
-                <Link
-                  to="/login"
+                <button
+                  onClick={() => document.getElementById("product")?.scrollIntoView({ behavior: "smooth" })}
                   className="group inline-flex items-center gap-2 rounded-full border border-white/15 px-7 py-3.5 text-sm font-semibold text-white/75 transition-all duration-300 hover:border-white/35 hover:text-white"
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-brass transition-transform duration-300 group-hover:scale-150" />
                   Watch it work
-                </Link>
+                </button>
               </motion.div>
 
               <motion.p

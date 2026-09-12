@@ -1,19 +1,19 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import api from '@/lib/api';
+import type { ApiOrganization, ApiUser } from '@/types/api';
 
-interface User {
+export interface User {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
-  avatarUrl?: string;
-  [key: string]: unknown;
+  avatarUrl?: string | null;
 }
 
-interface Organization {
+export interface Organization {
   id: string;
   name: string;
-  slug: string;
+  slug?: string;
   role: string;
 }
 
@@ -21,104 +21,122 @@ interface AuthContextType {
   user: User | null;
   organizations: Organization[];
   currentOrganization: Organization | null;
-  isAuthenticated: boolean;
+  setCurrentOrganization: (org: Organization) => void;
+  loading: boolean;
   isLoading: boolean;
+  isAuthenticated: boolean;
   demoMode: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
+  register: (email: string, password: string, firstName: string, lastName: string, orgName?: string) => Promise<void>;
   logout: () => Promise<void>;
-  setCurrentOrganization: (org: Organization) => void;
   refreshUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | null>(null);
+
+function toUser(u: ApiUser): User {
+  return {
+    id: u.id,
+    email: u.email,
+    firstName: u.firstName,
+    lastName: u.lastName,
+    avatarUrl: u.avatarUrl ?? null,
+  };
+}
+
+function toOrg(o: ApiOrganization): Organization {
+  return { id: o.id, name: o.name, slug: o.slug, role: o.role ?? '' };
+}
+
+const STORAGE_ORG_KEY = 'taskcontract.activeOrg';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [currentOrganization, setCurrentOrganization] = useState<Organization | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [currentOrganization, setCurrentOrganizationState] = useState<Organization | null>(null);
+  const [loading, setLoading] = useState(true);
   const [demoMode, setDemoMode] = useState(api.demoActive);
 
-  useEffect(() => {
-    const unsubscribe = api.subscribeDemo(setDemoMode);
-    return unsubscribe;
+  const applySession = useCallback((u: ApiUser, orgs: ApiOrganization[]) => {
+    setUser(toUser(u));
+    const orgList = orgs.map(toOrg);
+    setOrganizations(orgList);
+    const storedId = localStorage.getItem(STORAGE_ORG_KEY);
+    const active = orgList.find((o) => o.id === storedId) ?? orgList[0] ?? null;
+    setCurrentOrganizationState(active);
   }, []);
 
-  const applySession = (userData: User, orgs: Organization[]) => {
-    setUser(userData);
-    setOrganizations(orgs);
-    const savedOrgId = localStorage.getItem('currentOrganizationId');
-    const currentOrg = orgs.find((o) => o.id === savedOrgId) || orgs[0];
-    if (currentOrg) {
-      setCurrentOrganization(currentOrg);
-      localStorage.setItem('currentOrganizationId', currentOrg.id);
-    }
-  };
-
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
-      const token = localStorage.getItem('accessToken');
-      if (!token && !api.demoActive) {
-        setIsLoading(false);
+      const me = await api.getMe();
+      applySession(me.user, me.organizations);
+    } catch {
+      // Session gone — stay signed in in demo mode, otherwise clear.
+      if (!api.demoActive) {
+        setUser(null);
+        setOrganizations([]);
+        setCurrentOrganizationState(null);
+      }
+    }
+  }, [applySession]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const unsub = api.subscribeDemo((active) => {
+      if (!cancelled) setDemoMode(active);
+    });
+
+    const boot = async () => {
+      const token = localStorage.getItem('taskcontract.accessToken');
+      if (!token) {
+        setLoading(false);
         return;
       }
-
-      let data: { user: User; organizations: Organization[] };
       try {
-        data = await api.getMe();
-      } catch (error) {
-        // Backend unreachable — the client has switched to demo mode.
-        if (api.demoActive) {
-          data = await api.getMe();
-        } else {
-          throw error;
-        }
+        await refreshUser();
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      applySession(data.user, data.organizations);
-    } catch (error) {
-      console.error('Failed to refresh user:', error);
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+    boot();
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [refreshUser]);
 
-  useEffect(() => {
-    refreshUser();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const setCurrentOrganization = useCallback((org: Organization) => {
+    setCurrentOrganizationState(org);
+    localStorage.setItem(STORAGE_ORG_KEY, org.id);
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const { user: userData, organizations: orgs } = await api.login(email, password);
-    applySession(userData, orgs);
-  };
+  const login = useCallback(async (email: string, password: string) => {
+    const res = await api.login(email, password);
+    applySession(res.user, res.organizations);
+    setCurrentOrganizationState(res.organizations.map(toOrg)[0] ?? null);
+  }, [applySession]);
 
-  const register = async (email: string, password: string, firstName: string, lastName: string) => {
-    const { user: userData, organization: org } = await api.register(email, password, firstName, lastName);
-    applySession(userData, [org]);
-  };
+  const register = useCallback(
+    async (email: string, password: string, firstName: string, lastName: string, orgName?: string) => {
+      const res = await api.register(email, password, firstName, lastName, orgName);
+      applySession(res.user, [res.organization]);
+      setCurrentOrganizationState(toOrg(res.organization));
+    },
+    [applySession]
+  );
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await api.logout();
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      setUser(null);
-      setOrganizations([]);
-      setCurrentOrganization(null);
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('currentOrganizationId');
+    } catch {
+      // ignore — token cleared locally below either way
     }
-  };
-
-  const handleSetCurrentOrganization = (org: Organization) => {
-    setCurrentOrganization(org);
-    localStorage.setItem('currentOrganizationId', org.id);
-  };
+    localStorage.removeItem('taskcontract.accessToken');
+    localStorage.removeItem(STORAGE_ORG_KEY);
+    setUser(null);
+    setOrganizations([]);
+    setCurrentOrganizationState(null);
+  }, []);
 
   return (
     <AuthContext.Provider
@@ -126,13 +144,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         organizations,
         currentOrganization,
-        isAuthenticated: !!user,
-        isLoading,
+        setCurrentOrganization,
+        loading,
+        isLoading: loading,
+        isAuthenticated: Boolean(user),
         demoMode,
         login,
         register,
         logout,
-        setCurrentOrganization: handleSetCurrentOrganization,
         refreshUser,
       }}
     >
@@ -141,10 +160,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+export function useAuth(): AuthContextType {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 }

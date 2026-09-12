@@ -349,6 +349,90 @@ router.get('/:organizationId/analytics', authenticate, asyncHandler(async (req, 
     .select('title contractNumber currentStatus updatedAt')
     .lean();
 
+  // Time-series + team performance — computed from the real records.
+  const eightWeeksAgo = new Date();
+  eightWeeksAgo.setHours(0, 0, 0, 0);
+  eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 7 * 8);
+
+  const timelineContracts = await Contract.find({
+    organization: organizationId,
+    isDeleted: false,
+    createdAt: { $gte: eightWeeksAgo },
+  })
+    .select('createdAt approvedAt completedAt currentDeadline acceptedAt currentStatus responsibleExecutor')
+    .populate('responsibleExecutor', 'firstName lastName')
+    .lean();
+
+  const weeklyActivity = [];
+  for (let i = 7; i >= 0; i--) {
+    const start = new Date(eightWeeksAgo);
+    start.setDate(start.getDate() + i * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    weeklyActivity.push({
+      week: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      created: timelineContracts.filter((c) => {
+        const t = new Date(c.createdAt);
+        return t >= start && t < end;
+      }).length,
+      completed: timelineContracts.filter((c) => {
+        const t = c.completedAt ? new Date(c.completedAt) : null;
+        return t && t >= start && t < end;
+      }).length,
+    });
+  }
+
+  const sealedPerMonth = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date();
+    const start = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    const end = new Date(d.getFullYear(), d.getMonth() - i + 1, 1);
+    sealedPerMonth.push({
+      month: start.toLocaleDateString('en-US', { month: 'short' }),
+      sealed: timelineContracts.filter((c) => {
+        const t = c.approvedAt ? new Date(c.approvedAt) : null;
+        return t && t >= start && t < end;
+      }).length,
+    });
+  }
+
+  // Team performance: every executor with at least one contract.
+  const byExecutor = new Map();
+  for (const c of timelineContracts) {
+    const executor = c.responsibleExecutor;
+    if (!executor) continue;
+    const key = String(executor._id);
+    if (!byExecutor.has(key)) {
+      byExecutor.set(key, {
+        name: `${executor.firstName || '?'} ${executor.lastName || ''}`.trim(),
+        completed: 0,
+        totalDays: 0,
+        onTime: 0,
+        withDeadline: 0,
+      });
+    }
+    const row = byExecutor.get(key);
+    if (c.approvedAt) {
+      row.completed += 1;
+      if (c.acceptedAt) {
+        row.totalDays += Math.max(
+          0,
+          Math.round((new Date(c.approvedAt) - new Date(c.acceptedAt)) / 86400000)
+        );
+      }
+      if (c.currentDeadline) {
+        row.withDeadline += 1;
+        if (new Date(c.approvedAt) <= new Date(c.currentDeadline)) row.onTime += 1;
+      }
+    }
+  }
+  const teamPerformance = [...byExecutor.values()].map((row) => ({
+    name: row.name,
+    completed: row.completed,
+    avgDays: row.completed ? Math.round((row.totalDays / row.completed) * 10) / 10 : 0,
+    onTime: row.withDeadline ? Math.round((row.onTime / row.withDeadline) * 100) : 0,
+  }));
+
   res.json({
     stats: {
       totalContracts,
@@ -363,6 +447,9 @@ router.get('/:organizationId/analytics', authenticate, asyncHandler(async (req, 
       return acc;
     }, {}),
     recentContracts,
+    weeklyActivity,
+    sealedPerMonth,
+    teamPerformance,
   });
 }));
 
