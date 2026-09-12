@@ -13,3 +13,23 @@ Object.defineProperty(window, "matchMedia", {
     dispatchEvent: () => {},
   }),
 });
+
+class MockIntersectionObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords() {
+    return [];
+  }
+  root = null;
+  rootMargin = "";
+  thresholds = [];
+}
+globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver;
+
+class MockResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;

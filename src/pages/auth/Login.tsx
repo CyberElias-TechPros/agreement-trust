@@ -1,132 +1,162 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { FileText, Eye, EyeOff } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Eye, EyeOff, LogIn, Sparkles } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/AuthContext";
+import api from "@/lib/api";
+import { usePageMeta } from "@/hooks/usePageMeta";
+import { AuthShell } from "./AuthShell";
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [demoLoading, setDemoLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [demoActive, setDemoActive] = useState(api.demoActive);
   const navigate = useNavigate();
   const { login } = useAuth();
+
+  usePageMeta(
+    "Sign in — TaskContract",
+    "Sign in to your TaskContract workspace and continue governing your delegated work."
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
-
+    setError("");
     try {
       await login(email, password);
-      navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.message || 'Invalid credentials');
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid credentials");
+      setDemoActive(api.demoActive);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleDemo = async () => {
+    setDemoLoading(true);
+    setError("");
+    try {
+      await api.enterDemo();
+      await login("alex.morgan@northwind.studio", "demo1234");
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not enter the demo workspace");
+    } finally {
+      setDemoLoading(false);
+    }
+  };
+
+  const inputClass =
+    "h-11 rounded-xl border-white/12 bg-white/[0.04] text-white placeholder:text-white/25 transition-all duration-300 focus-visible:border-indigo-bright/60 focus-visible:ring-2 focus-visible:ring-indigo-bright/25 hover:border-white/25";
+  const labelClass = "mb-2 block text-[13px] font-medium text-white/70";
+
   return (
-    <div className="min-h-screen flex">
-      {/* Left Panel */}
-      <div className="hidden lg:flex lg:w-1/2 gradient-hero relative items-center justify-center p-12">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,_hsl(0_0%_100%_/_0.1),_transparent_50%)]" />
-        <div className="relative text-primary-foreground max-w-md">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-primary-foreground/20 flex items-center justify-center backdrop-blur-sm">
-              <FileText className="w-5 h-5" />
-            </div>
-            <span className="font-bold text-xl">TaskContract</span>
-          </div>
-          <h2 className="text-3xl font-bold mb-4 leading-tight">Delegation governance<br />made simple.</h2>
-          <p className="text-primary-foreground/70 leading-relaxed">
-            Version-controlled task agreements with structured accountability. No more ambiguity.
-          </p>
+    <AuthShell
+      footer={
+        <p className="mt-8 text-center text-[13px] text-white/45">
+          New to TaskContract?{" "}
+          <Link to="/register" className="font-semibold text-brass transition-colors hover:text-white">
+            Create an account
+          </Link>
+        </p>
+      }
+    >
+      <h1 className="font-display text-3xl italic text-white" style={{ fontVariationSettings: "'opsz' 48" }}>
+        Welcome back
+      </h1>
+      <p className="mt-2 text-sm text-white/45">Sign in to your ledger and pick up where the record left off.</p>
+
+      {error && (
+        <div role="alert" className="mt-5 rounded-xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-[13px] text-red-300">
+          {error}
         </div>
-      </div>
+      )}
 
-      {/* Right Panel */}
-      <div className="flex-1 flex items-center justify-center p-6">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-sm"
+      <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+        <div>
+          <label htmlFor="email" className={labelClass}>
+            Email
+          </label>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@company.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <div className="flex items-center justify-between">
+            <label htmlFor="password" className={labelClass}>
+              Password
+            </label>
+            <Link to="/forgot-password" className="mb-2 text-xs text-white/40 transition-colors hover:text-brass">
+              Forgot password?
+            </Link>
+          </div>
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className={`${inputClass} pr-11`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/35 transition-colors hover:text-white"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="group inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white text-sm font-semibold text-[#0b0d1c] transition-all duration-300 hover:shadow-[0_8px_32px_rgba(255,255,255,0.25)] disabled:opacity-60"
         >
-          <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 rounded-lg gradient-hero flex items-center justify-center">
-              <FileText className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-foreground">TaskContract</span>
-          </div>
+          {loading ? "Signing in…" : "Sign in"}
+          {!loading && <LogIn className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />}
+        </button>
+      </form>
 
-          <h1 className="text-2xl font-bold text-foreground mb-1">Welcome back</h1>
-          <p className="text-sm text-muted-foreground mb-8">Sign in to your account to continue</p>
-
-          {error && (
-            <div className="mb-4 p-3 text-sm text-red-500 bg-red-50 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="input-label">Email</label>
-              <Input
-                type="email"
-                placeholder="you@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-sm font-medium text-foreground">Password</label>
-                <Link to="/forgot-password" className="text-xs text-primary hover:underline">Forgot password?</Link>
-              </div>
-              <div className="relative">
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <Button type="submit" className="w-full gradient-hero text-primary-foreground border-0" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign In'}
-            </Button>
-          </form>
-
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
-            <div className="relative flex justify-center text-xs"><span className="bg-background px-2 text-muted-foreground">or continue with</span></div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline" size="sm" className="w-full">Google</Button>
-            <Button variant="outline" size="sm" className="w-full">Microsoft</Button>
-          </div>
-
-          <p className="text-center text-sm text-muted-foreground mt-6">
-            Don't have an account?{' '}
-            <Link to="/register" className="text-primary font-medium hover:underline">Sign up</Link>
-          </p>
-        </motion.div>
+      <div className="my-6 flex items-center gap-4">
+        <span className="h-px flex-1 bg-white/10" />
+        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/30">or</span>
+        <span className="h-px flex-1 bg-white/10" />
       </div>
-    </div>
+
+      <button
+        onClick={handleDemo}
+        disabled={demoLoading}
+        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-brass/35 bg-brass/10 text-sm font-semibold text-brass transition-all duration-300 hover:bg-brass hover:text-[#241503] disabled:opacity-60"
+      >
+        <Sparkles className="h-4 w-4" />
+        {demoLoading ? "Opening the demo…" : "Explore the demo workspace"}
+      </button>
+
+      {demoActive && (
+        <p className="mt-4 rounded-xl border border-white/8 bg-white/[0.03] px-4 py-3 text-center font-mono text-[10px] leading-relaxed text-white/35">
+          Backend not connected — the demo workspace runs fully in your browser.
+          <br />
+          Demo login: alex.morgan@northwind.studio · demo1234
+        </p>
+      )}
+    </AuthShell>
   );
 }

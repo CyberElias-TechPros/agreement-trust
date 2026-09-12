@@ -41,8 +41,10 @@ const organizationSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// Index for slug
-organizationSchema.index({ slug: 1 });
+// Index for slug (unique is declared inline on the field — this adds a
+// non-unique lookup index used by admin queries; the unique constraint
+// on the field itself is what enforces uniqueness).
+organizationSchema.index({ createdAt: -1 });
 
 // Validate slug format
 organizationSchema.pre('save', function(next) {

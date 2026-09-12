@@ -15,6 +15,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ["'Plus Jakarta Sans'", "system-ui", "sans-serif"],
+        display: ["'Fraunces'", "Georgia", "serif"],
         mono: ["'JetBrains Mono'", "monospace"],
       },
       colors: {
@@ -83,6 +84,22 @@ export default {
           rejected: "hsl(var(--status-rejected))",
           archived: "hsl(var(--status-archived))",
         },
+        ink: {
+          DEFAULT: "hsl(var(--ink))",
+          soft: "hsl(var(--ink-2))",
+          line: "rgba(160, 172, 226, 0.14)",
+        },
+        paper: {
+          DEFAULT: "hsl(var(--paper))",
+        },
+        brass: {
+          DEFAULT: "hsl(var(--brass))",
+          strong: "hsl(var(--brass-strong))",
+        },
+        indigo: {
+          DEFAULT: "hsl(var(--indigo))",
+          bright: "hsl(var(--indigo-bright))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -129,5 +146,8 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("tailwindcss-animate"),
+  ],
 } satisfies Config;

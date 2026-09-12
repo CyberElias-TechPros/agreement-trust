@@ -2,25 +2,34 @@ import express from 'express';
 import { User, Organization, Membership, AuditLog } from '../models/index.js';
 import { generateTokens, verifyToken, authenticate } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { validateBody, isEmail, isPassword, isName } from '../utils/validate.js';
 
 const router = express.Router();
 
 // Register new user
 router.post('/register', asyncHandler(async (req, res) => {
-  const { email, password, firstName, lastName } = req.body;
+  const { email, password, firstName, lastName } = req.body || {};
+
+  const errors = validateBody(
+    { email, password, firstName, lastName },
+    { email: isEmail, password: isPassword, firstName: isName, lastName: isName }
+  );
+  if (errors.length > 0) {
+    return res.status(400).json({ error: 'Validation failed', details: errors });
+  }
 
   // Check if user exists
-  const existingUser = await User.findOne({ email: email.toLowerCase() });
+  const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
   if (existingUser) {
-    return res.status(400).json({ error: 'Email already registered' });
+    return res.status(409).json({ error: 'Email already registered' });
   }
 
   // Create user
   const user = new User({
-    email: email.toLowerCase(),
+    email: email.toLowerCase().trim(),
     password,
-    firstName,
-    lastName,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
   });
 
   await user.save();
@@ -71,9 +80,14 @@ router.post('/register', asyncHandler(async (req, res) => {
 
 // Login
 router.post('/login', asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
 
-  const user = await User.findOne({ email: email.toLowerCase() });
+  const errors = validateBody({ email, password }, { email: isEmail, password: isPassword });
+  if (errors.length > 0) {
+    return res.status(400).json({ error: 'Validation failed', details: errors });
+  }
+
+  const user = await User.findOne({ email: email.toLowerCase().trim() });
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
@@ -227,7 +241,16 @@ router.patch('/me', authenticate, asyncHandler(async (req, res) => {
 
 // Change password
 router.post('/change-password', authenticate, asyncHandler(async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
+  const { currentPassword, newPassword } = req.body || {};
+
+  const errors = validateBody({ currentPassword, newPassword }, { currentPassword: isPassword, newPassword: isPassword });
+  if (errors.length > 0) {
+    return res.status(400).json({ error: 'Validation failed', details: errors });
+  }
+
+  if (currentPassword === newPassword) {
+    return res.status(400).json({ error: 'New password must be different from the current password' });
+  }
 
   const user = await User.findById(req.userId);
   const isMatch = await user.comparePassword(currentPassword);

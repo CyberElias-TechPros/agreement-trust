@@ -11,7 +11,7 @@ import { UserAvatar } from '@/components/UserAvatar';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/api';
-import type { InteractionType, ContractInteraction, ContractStatus, UserRole } from '@/types/contracts';
+import type { InteractionType, ContractInteraction, ContractStatus, ContractPriority, UserRole } from '@/types/contracts';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -218,7 +218,7 @@ export default function ContractDetail() {
         {currentActions.map((a) => (
           <Button
             key={a.action}
-            variant={a.variant as any}
+            variant={a.variant as "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"}
             onClick={() => handleStatusChange(a.action)}
           >
             {a.label}
@@ -241,7 +241,7 @@ export default function ContractDetail() {
             <h1 className="text-xl font-semibold text-foreground mb-2">{contract.title}</h1>
             <div className="flex items-center gap-3">
               <StatusBadge status={contract.currentStatus as ContractStatus} />
-              <PriorityBadge priority={contract.currentPriority as any} />
+              <PriorityBadge priority={contract.currentPriority as ContractPriority} />
             </div>
           </div>
         </div>
@@ -337,7 +337,7 @@ export default function ContractDetail() {
                 </div>
                 <div className="flex justify-between py-2 border-b border-border">
                   <span className="text-muted-foreground">Priority</span>
-                  <PriorityBadge priority={contract.currentPriority as any} />
+                  <PriorityBadge priority={contract.currentPriority as ContractPriority} />
                 </div>
                 <div className="flex justify-between py-2 border-b border-border">
                   <span className="text-muted-foreground">Deadline</span>

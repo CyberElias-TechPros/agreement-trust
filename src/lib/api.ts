@@ -1,341 +1,503 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/v1';
+import { demoApi } from "./demo/demoApi";
+import type {
+  ApiAnalytics,
+  ApiCategory,
+  ApiContract,
+  ApiInteraction,
+  ApiMembership,
+  ApiNotification,
+  ApiOrganization,
+  ApiPagination,
+  ApiTokens,
+  ApiUser,
+  LoginResponse,
+  MeResponse,
+  RegisterResponse,
+} from "@/types/api";
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api/v1";
+
+type DemoListener = (active: boolean) => void;
+
+/**
+ * ApiClient — single entry point for all server communication.
+ *
+ * Live mode  : talks to the Express/MongoDB backend at VITE_API_URL.
+ * Demo mode  : activates automatically when the backend is unreachable
+ *              (e.g. preview environments without a database). The entire
+ *              product then runs against an in-browser store with the
+ *              same business rules, and the UI clearly flags demo mode.
+ */
 class ApiClient {
   private accessToken: string | null = null;
+  private demoMode = import.meta.env.VITE_DEMO_MODE === "true";
+  private listeners = new Set<DemoListener>();
+
+  get demoActive(): boolean {
+    return this.demoMode;
+  }
+
+  /** Subscribe to demo-mode changes (used by the banner). */
+  subscribeDemo(listener: DemoListener): () => void {
+    this.listeners.add(listener);
+    listener(this.demoMode);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private enableDemo() {
+    if (this.demoMode) return;
+    this.demoMode = true;
+    this.listeners.forEach((l) => l(true));
+  }
 
   setAccessToken(token: string | null) {
     this.accessToken = token;
     if (token) {
-      localStorage.setItem('accessToken', token);
+      localStorage.setItem("accessToken", token);
     } else {
-      localStorage.removeItem('accessToken');
+      localStorage.removeItem("accessToken");
     }
   }
 
   getAccessToken(): string | null {
     if (!this.accessToken) {
-      this.accessToken = localStorage.getItem('accessToken');
+      this.accessToken = localStorage.getItem("accessToken");
     }
     return this.accessToken;
   }
 
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
+  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = this.getAccessToken();
-    
+
     const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...options.headers,
     };
 
     if (token) {
-      (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+      (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        ...options,
+        headers,
+      });
+    } catch {
+      // Network-level failure (backend down) — gracefully degrade to demo.
+      this.enableDemo();
+      throw new Error("API unreachable — switching to demo mode");
+    }
 
     if (response.status === 401) {
       this.setAccessToken(null);
-      window.location.href = '/login';
-      throw new Error('Unauthorized');
+      window.location.href = "/login";
+      throw new Error("Unauthorized");
     }
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      throw new Error(data.error || 'Request failed');
+      throw new Error(
+        typeof data === "object" && data && "error" in data ? String((data as { error: unknown }).error) : "Request failed"
+      );
     }
 
-    return data;
+    return data as T;
   }
 
-  // Auth
-  async register(email: string, password: string, firstName: string, lastName: string) {
-    const data = await this.request<{ user: any; organization: any; accessToken: string; refreshToken: string }>('/auth/register', {
-      method: 'POST',
+  /** Demo-mode entry point: sign into the seeded workspace. */
+  enterDemo() {
+    this.enableDemo();
+    return demoApi.enterDemo() as unknown as Promise<LoginResponse>;
+  }
+
+  /* ---------- auth ---------- */
+
+  async register(email: string, password: string, firstName: string, lastName: string): Promise<RegisterResponse> {
+    if (this.demoMode) {
+      const data = await demoApi.register(email, password, firstName, lastName);
+      this.setAccessToken(data.accessToken);
+      return data as unknown as RegisterResponse;
+    }
+    const data = await this.request<RegisterResponse>("/auth/register", {
+      method: "POST",
       body: JSON.stringify({ email, password, firstName, lastName }),
     });
     this.setAccessToken(data.accessToken);
     return data;
   }
 
-  async login(email: string, password: string) {
-    const data = await this.request<{ user: any; organizations: any[]; accessToken: string; refreshToken: string }>('/auth/login', {
-      method: 'POST',
+  async login(email: string, password: string): Promise<LoginResponse> {
+    if (this.demoMode) {
+      const data = await demoApi.login(email, password);
+      this.setAccessToken(data.accessToken);
+      return data as unknown as LoginResponse;
+    }
+    const data = await this.request<LoginResponse>("/auth/login", {
+      method: "POST",
       body: JSON.stringify({ email, password }),
     });
     this.setAccessToken(data.accessToken);
     return data;
   }
 
-  async logout() {
-    const refreshToken = localStorage.getItem('refreshToken');
-    await this.request('/auth/logout', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken }),
-    });
-    this.setAccessToken(null);
-    localStorage.removeItem('refreshToken');
+  async logout(): Promise<void> {
+    try {
+      if (this.demoMode) {
+        await demoApi.logout();
+      } else {
+        const refreshToken = localStorage.getItem("refreshToken");
+        await this.request("/auth/logout", {
+          method: "POST",
+          body: JSON.stringify({ refreshToken }),
+        });
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      this.setAccessToken(null);
+      localStorage.removeItem("refreshToken");
+    }
   }
 
-  async getMe() {
-    return this.request<{ user: any; organizations: any[] }>('/auth/me');
+  async getMe(): Promise<MeResponse> {
+    if (this.demoMode) return demoApi.getMe() as unknown as Promise<MeResponse>;
+    return this.request<MeResponse>("/auth/me");
   }
 
-  async updateProfile(data: { firstName?: string; lastName?: string; avatarUrl?: string }) {
-    return this.request<{ user: any }>('/auth/me', {
-      method: 'PATCH',
+  async updateProfile(data: { firstName?: string; lastName?: string; avatarUrl?: string }): Promise<{ user: ApiUser }> {
+    if (this.demoMode) return demoApi.updateProfile(data) as unknown as Promise<{ user: ApiUser }>;
+    return this.request<{ user: ApiUser }>("/auth/me", {
+      method: "PATCH",
       body: JSON.stringify(data),
     });
   }
 
-  async changePassword(currentPassword: string, newPassword: string) {
-    return this.request<{ message: string }>('/auth/change-password', {
-      method: 'POST',
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string } & Partial<ApiTokens>> {
+    if (this.demoMode) return demoApi.changePassword(currentPassword, newPassword);
+    return this.request<{ message: string } & Partial<ApiTokens>>("/auth/change-password", {
+      method: "POST",
       body: JSON.stringify({ currentPassword, newPassword }),
     });
   }
 
-  // Organizations
-  async getOrganizations() {
-    return this.request<{ organizations: any[] }>('/organizations');
+  /* ---------- organizations ---------- */
+
+  async getOrganizations(): Promise<{ organizations: ApiOrganization[] }> {
+    if (this.demoMode) return demoApi.getOrganizations() as unknown as Promise<{ organizations: ApiOrganization[] }>;
+    return this.request<{ organizations: ApiOrganization[] }>("/organizations");
   }
 
-  async createOrganization(name: string, slug?: string) {
-    return this.request<{ organization: any }>('/organizations', {
-      method: 'POST',
+  async createOrganization(name: string, slug?: string): Promise<{ organization: ApiOrganization }> {
+    if (this.demoMode) return demoApi.createOrganization(name, slug) as unknown as Promise<{ organization: ApiOrganization }>;
+    return this.request<{ organization: ApiOrganization }>("/organizations", {
+      method: "POST",
       body: JSON.stringify({ name, slug }),
     });
   }
 
-  async getOrganization(organizationId: string) {
-    return this.request<{ organization: any }>(`/organizations/${organizationId}`);
+  async getOrganization(organizationId: string): Promise<{ organization: ApiOrganization }> {
+    if (this.demoMode) return demoApi.getOrganization(organizationId) as unknown as Promise<{ organization: ApiOrganization }>;
+    return this.request<{ organization: ApiOrganization }>(`/organizations/${organizationId}`);
   }
 
-  async updateOrganization(organizationId: string, data: { name?: string; branding?: any; settings?: any }) {
-    return this.request<{ organization: any }>(`/organizations/${organizationId}`, {
-      method: 'PATCH',
+  async updateOrganization(
+    organizationId: string,
+    data: { name?: string; branding?: ApiOrganization["branding"]; settings?: ApiOrganization["settings"] }
+  ): Promise<{ organization: ApiOrganization }> {
+    if (this.demoMode) return demoApi.updateOrganization(organizationId, data) as unknown as Promise<{ organization: ApiOrganization }>;
+    return this.request<{ organization: ApiOrganization }>(`/organizations/${organizationId}`, {
+      method: "PATCH",
       body: JSON.stringify(data),
     });
   }
 
-  async getOrganizationMembers(organizationId: string) {
-    return this.request<{ members: any[] }>(`/organizations/${organizationId}/members`);
+  async getOrganizationMembers(organizationId: string): Promise<{ members: ApiMembership[] }> {
+    if (this.demoMode) return demoApi.getOrganizationMembers(organizationId) as unknown as Promise<{ members: ApiMembership[] }>;
+    return this.request<{ members: ApiMembership[] }>(`/organizations/${organizationId}/members`);
   }
 
-  async inviteMember(organizationId: string, email: string, role?: string) {
-    return this.request<{ membership: any }>(`/organizations/${organizationId}/members`, {
-      method: 'POST',
+  async inviteMember(organizationId: string, email: string, role?: string): Promise<{ membership: ApiMembership }> {
+    if (this.demoMode) return demoApi.inviteMember(organizationId, email, role) as unknown as Promise<{ membership: ApiMembership }>;
+    return this.request<{ membership: ApiMembership }>(`/organizations/${organizationId}/members`, {
+      method: "POST",
       body: JSON.stringify({ email, role }),
     });
   }
 
-  async updateMemberRole(organizationId: string, memberId: string, role: string, status?: string) {
-    return this.request<{ membership: any }>(`/organizations/${organizationId}/members/${memberId}`, {
-      method: 'PATCH',
+  async updateMemberRole(
+    organizationId: string,
+    memberId: string,
+    role: string,
+    status?: string
+  ): Promise<{ membership: ApiMembership }> {
+    if (this.demoMode) return demoApi.updateMemberRole(organizationId, memberId, role, status) as unknown as Promise<{ membership: ApiMembership }>;
+    return this.request<{ membership: ApiMembership }>(`/organizations/${organizationId}/members/${memberId}`, {
+      method: "PATCH",
       body: JSON.stringify({ role, status }),
     });
   }
 
-  async removeMember(organizationId: string, memberId: string) {
+  async removeMember(organizationId: string, memberId: string): Promise<{ message: string }> {
+    if (this.demoMode) return demoApi.removeMember(organizationId, memberId);
     return this.request<{ message: string }>(`/organizations/${organizationId}/members/${memberId}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
-  async getOrganizationAnalytics(organizationId: string) {
-    return this.request<{ stats: any; contractsByStatus: any; recentContracts: any[] }>(
-      `/organizations/${organizationId}/analytics`
-    );
+  async getOrganizationAnalytics(organizationId: string): Promise<ApiAnalytics> {
+    if (this.demoMode) return demoApi.getOrganizationAnalytics(organizationId) as unknown as Promise<ApiAnalytics>;
+    return this.request<ApiAnalytics>(`/organizations/${organizationId}/analytics`);
   }
 
-  // Contracts
-  async getContracts(organizationId: string, params?: { status?: string; priority?: string; search?: string; page?: number; limit?: number }) {
+  /* ---------- contracts ---------- */
+
+  async getContracts(
+    organizationId: string,
+    params?: { status?: string; priority?: string; search?: string; page?: number; limit?: number }
+  ): Promise<{ contracts: ApiContract[]; pagination: ApiPagination }> {
+    if (this.demoMode) return demoApi.getContracts(organizationId, params) as unknown as Promise<{ contracts: ApiContract[]; pagination: ApiPagination }>;
     const queryParams = new URLSearchParams();
-    if (params?.status) queryParams.append('status', params.status);
-    if (params?.priority) queryParams.append('priority', params.priority);
-    if (params?.search) queryParams.append('search', params.search);
-    if (params?.page) queryParams.append('page', String(params.page));
-    if (params?.limit) queryParams.append('limit', String(params.limit));
-    
-    const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
-    return this.request<{ contracts: any[]; pagination: any }>(
+    if (params?.status) queryParams.append("status", params.status);
+    if (params?.priority) queryParams.append("priority", params.priority);
+    if (params?.search) queryParams.append("search", params.search);
+    if (params?.page) queryParams.append("page", String(params.page));
+    if (params?.limit) queryParams.append("limit", String(params.limit));
+
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
+    return this.request<{ contracts: ApiContract[]; pagination: ApiPagination }>(
       `/organizations/${organizationId}/contracts${query}`
     );
   }
 
-  async getContract(organizationId: string, contractId: string) {
-    return this.request<{ contract: any; participants: any[]; versions: any[]; interactions: any[] }>(
+  async getContract(
+    organizationId: string,
+    contractId: string
+  ): Promise<{ contract: ApiContract; participants: unknown[]; versions: unknown[]; interactions: ApiInteraction[] }> {
+    if (this.demoMode) return demoApi.getContract(organizationId, contractId) as unknown as Promise<{
+      contract: ApiContract;
+      participants: unknown[];
+      versions: unknown[];
+      interactions: ApiInteraction[];
+    }>;
+    return this.request<{ contract: ApiContract; participants: unknown[]; versions: unknown[]; interactions: ApiInteraction[] }>(
       `/organizations/${organizationId}/contracts/${contractId}`
     );
   }
 
-  async createContract(organizationId: string, data: {
-    title: string;
-    description: string;
-    deadline?: string;
-    priority?: string;
-    categoryId?: string;
-    executorId?: string;
-    tags?: string[];
-  }) {
-    return this.request<{ contract: any }>(`/organizations/${organizationId}/contracts`, {
-      method: 'POST',
+  async createContract(
+    organizationId: string,
+    data: {
+      title: string;
+      description: string;
+      deadline?: string;
+      priority?: string;
+      categoryId?: string;
+      executorId?: string;
+      tags?: string[];
+    }
+  ): Promise<{ contract: ApiContract }> {
+    if (this.demoMode) return demoApi.createContract(organizationId, data) as unknown as Promise<{ contract: ApiContract }>;
+    return this.request<{ contract: ApiContract }>(`/organizations/${organizationId}/contracts`, {
+      method: "POST",
       body: JSON.stringify(data),
     });
   }
 
-  async updateContract(organizationId: string, contractId: string, data: {
-    title?: string;
-    description?: string;
-    deadline?: string;
-    priority?: string;
-    categoryId?: string;
-    tags?: string[];
-    changeReason?: string;
-  }) {
-    return this.request<{ contract: any }>(`/organizations/${organizationId}/contracts/${contractId}`, {
-      method: 'PATCH',
+  async updateContract(
+    organizationId: string,
+    contractId: string,
+    data: {
+      title?: string;
+      description?: string;
+      deadline?: string;
+      priority?: string;
+      categoryId?: string;
+      tags?: string[];
+      changeReason?: string;
+    }
+  ): Promise<{ contract: ApiContract }> {
+    if (this.demoMode) return demoApi.updateContract(organizationId, contractId, data) as unknown as Promise<{ contract: ApiContract }>;
+    return this.request<{ contract: ApiContract }>(`/organizations/${organizationId}/contracts/${contractId}`, {
+      method: "PATCH",
       body: JSON.stringify(data),
     });
   }
 
-  async sendContract(organizationId: string, contractId: string) {
-    return this.request<{ contract: any }>(`/organizations/${organizationId}/contracts/${contractId}/send`, {
-      method: 'POST',
-    });
-  }
-
-  async acceptContract(organizationId: string, contractId: string) {
-    return this.request<{ contract: any }>(`/organizations/${organizationId}/contracts/${contractId}/accept`, {
-      method: 'POST',
-    });
-  }
-
-  async rejectContract(organizationId: string, contractId: string, reason?: string) {
-    return this.request<{ contract: any }>(`/organizations/${organizationId}/contracts/${contractId}/reject`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
-  }
-
-  async submitContract(organizationId: string, contractId: string, summary?: string, attachments?: any[]) {
-    return this.request<{ contract: any }>(`/organizations/${organizationId}/contracts/${contractId}/submit`, {
-      method: 'POST',
-      body: JSON.stringify({ summary, attachments }),
-    });
-  }
-
-  async approveContract(organizationId: string, contractId: string) {
-    return this.request<{ contract: any }>(`/organizations/${organizationId}/contracts/${contractId}/approve`, {
-      method: 'POST',
-    });
-  }
-
-  async archiveContract(organizationId: string, contractId: string) {
-    return this.request<{ contract: any }>(`/organizations/${organizationId}/contracts/${contractId}/archive`, {
-      method: 'POST',
-    });
-  }
-
-  async getContractHistory(organizationId: string, contractId: string) {
-    return this.request<{ versions: any[] }>(
-      `/organizations/${organizationId}/contracts/${contractId}/history`
+  private async transition(
+    organizationId: string,
+    contractId: string,
+    action: "send" | "accept" | "reject" | "submit" | "approve" | "archive",
+    note?: string
+  ): Promise<{ contract: ApiContract }> {
+    if (this.demoMode) {
+      switch (action) {
+        case "send":
+          return demoApi.sendContract(organizationId, contractId) as unknown as Promise<{ contract: ApiContract }>;
+        case "accept":
+          return demoApi.acceptContract(organizationId, contractId) as unknown as Promise<{ contract: ApiContract }>;
+        case "reject":
+          return demoApi.rejectContract(organizationId, contractId, note) as unknown as Promise<{ contract: ApiContract }>;
+        case "submit":
+          return demoApi.submitContract(organizationId, contractId, note) as unknown as Promise<{ contract: ApiContract }>;
+        case "approve":
+          return demoApi.approveContract(organizationId, contractId) as unknown as Promise<{ contract: ApiContract }>;
+        case "archive":
+          return demoApi.archiveContract(organizationId, contractId) as unknown as Promise<{ contract: ApiContract }>;
+      }
+    }
+    const body: Record<string, unknown> | undefined =
+      action === "reject" || action === "submit" ? { summary: note, reason: note } : undefined;
+    return this.request<{ contract: ApiContract }>(
+      `/organizations/${organizationId}/contracts/${contractId}/${action}`,
+      { method: "POST", body: body ? JSON.stringify(body) : undefined }
     );
   }
 
-  async getContractAudit(organizationId: string, contractId: string) {
-    return this.request<{ auditLogs: any[] }>(
-      `/organizations/${organizationId}/contracts/${contractId}/audit`
-    );
+  sendContract(organizationId: string, contractId: string) {
+    return this.transition(organizationId, contractId, "send");
   }
 
-  // Interactions
-  async getInteractions(organizationId: string, contractId: string, type?: string) {
-    const query = type ? `?type=${type}` : '';
-    return this.request<{ interactions: any[]; pagination: any }>(
+  acceptContract(organizationId: string, contractId: string) {
+    return this.transition(organizationId, contractId, "accept");
+  }
+
+  rejectContract(organizationId: string, contractId: string, reason?: string) {
+    return this.transition(organizationId, contractId, "reject", reason);
+  }
+
+  submitContract(organizationId: string, contractId: string, summary?: string, _attachments?: unknown[]) {
+    return this.transition(organizationId, contractId, "submit", summary);
+  }
+
+  approveContract(organizationId: string, contractId: string) {
+    return this.transition(organizationId, contractId, "approve");
+  }
+
+  archiveContract(organizationId: string, contractId: string) {
+    return this.transition(organizationId, contractId, "archive");
+  }
+
+  async getContractHistory(organizationId: string, contractId: string): Promise<{ versions: unknown[] }> {
+    if (this.demoMode) return demoApi.getContractHistory(organizationId, contractId) as unknown as Promise<{ versions: unknown[] }>;
+    return this.request<{ versions: unknown[] }>(`/organizations/${organizationId}/contracts/${contractId}/history`);
+  }
+
+  async getContractAudit(organizationId: string, contractId: string): Promise<{ auditLogs: unknown[] }> {
+    if (this.demoMode) return demoApi.getContractAudit(organizationId, contractId) as unknown as Promise<{ auditLogs: unknown[] }>;
+    return this.request<{ auditLogs: unknown[] }>(`/organizations/${organizationId}/contracts/${contractId}/audit`);
+  }
+
+  /* ---------- interactions ---------- */
+
+  async getInteractions(
+    organizationId: string,
+    contractId: string,
+    type?: string
+  ): Promise<{ interactions: ApiInteraction[]; pagination: ApiPagination }> {
+    if (this.demoMode) return demoApi.getInteractions(organizationId, contractId, type) as unknown as Promise<{ interactions: ApiInteraction[]; pagination: ApiPagination }>;
+    const query = type ? `?type=${type}` : "";
+    return this.request<{ interactions: ApiInteraction[]; pagination: ApiPagination }>(
       `/organizations/${organizationId}/contracts/${contractId}/interactions${query}`
     );
   }
 
-  async createInteraction(organizationId: string, contractId: string, data: {
-    interactionType: string;
-    content: string;
-    structuredData?: any;
-    progressPercentage?: number;
-    attachments?: any[];
-  }) {
-    return this.request<{ interaction: any }>(
+  async createInteraction(
+    organizationId: string,
+    contractId: string,
+    data: { interactionType: string; content: string; structuredData?: unknown; progressPercentage?: number; attachments?: unknown[] }
+  ): Promise<{ interaction: ApiInteraction }> {
+    if (this.demoMode) return demoApi.createInteraction(organizationId, contractId, data) as unknown as Promise<{ interaction: ApiInteraction }>;
+    return this.request<{ interaction: ApiInteraction }>(
       `/organizations/${organizationId}/contracts/${contractId}/interactions`,
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }
+      { method: "POST", body: JSON.stringify(data) }
     );
   }
 
-  // Notifications
-  async getNotifications(params?: { unreadOnly?: boolean; limit?: number; offset?: number }) {
+  /* ---------- notifications ---------- */
+
+  async getNotifications(params?: {
+    unreadOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ notifications: ApiNotification[]; unreadCount: number; pagination: ApiPagination }> {
+    if (this.demoMode) return demoApi.getNotifications(params) as unknown as Promise<{ notifications: ApiNotification[]; unreadCount: number; pagination: ApiPagination }>;
     const queryParams = new URLSearchParams();
-    if (params?.unreadOnly) queryParams.append('unreadOnly', 'true');
-    if (params?.limit) queryParams.append('limit', String(params.limit));
-    if (params?.offset) queryParams.append('offset', String(params.offset));
-    
-    const query = queryParams.toString() ? `?${queryParams.toString()}` : '';
-    return this.request<{ notifications: any[]; unreadCount: number; pagination: any }>(
+    if (params?.unreadOnly) queryParams.append("unreadOnly", "true");
+    if (params?.limit) queryParams.append("limit", String(params.limit));
+    if (params?.offset) queryParams.append("offset", String(params.offset));
+
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
+    return this.request<{ notifications: ApiNotification[]; unreadCount: number; pagination: ApiPagination }>(
       `/notifications${query}`
     );
   }
 
-  async markNotificationRead(notificationId: string) {
-    return this.request<{ notification: any }>(`/notifications/${notificationId}/read`, {
-      method: 'POST',
+  async markNotificationRead(notificationId: string): Promise<{ notification: ApiNotification }> {
+    if (this.demoMode) return demoApi.markNotificationRead(notificationId) as unknown as Promise<{ notification: ApiNotification }>;
+    return this.request<{ notification: ApiNotification }>(`/notifications/${notificationId}/read`, {
+      method: "POST",
     });
   }
 
-  async markAllNotificationsRead() {
-    return this.request<{ message: string }>('/notifications/read-all', {
-      method: 'POST',
+  async markAllNotificationsRead(): Promise<{ message: string }> {
+    if (this.demoMode) return demoApi.markAllNotificationsRead();
+    return this.request<{ message: string }>("/notifications/read-all", {
+      method: "POST",
     });
   }
 
-  // Categories
-  async getCategories(organizationId: string) {
-    return this.request<{ categories: any[] }>(`/organizations/${organizationId}/categories`);
+  /* ---------- categories ---------- */
+
+  async getCategories(organizationId: string): Promise<{ categories: ApiCategory[] }> {
+    if (this.demoMode) return demoApi.getCategories(organizationId) as unknown as Promise<{ categories: ApiCategory[] }>;
+    return this.request<{ categories: ApiCategory[] }>(`/organizations/${organizationId}/categories`);
   }
 
-  async createCategory(organizationId: string, data: { name: string; color?: string; description?: string }) {
-    return this.request<{ category: any }>(`/organizations/${organizationId}/categories`, {
-      method: 'POST',
+  async createCategory(
+    organizationId: string,
+    data: { name: string; color?: string; description?: string }
+  ): Promise<{ category: ApiCategory }> {
+    if (this.demoMode) return demoApi.createCategory(organizationId, data) as unknown as Promise<{ category: ApiCategory }>;
+    return this.request<{ category: ApiCategory }>(`/organizations/${organizationId}/categories`, {
+      method: "POST",
       body: JSON.stringify(data),
     });
   }
 
-  async updateCategory(organizationId: string, categoryId: string, data: { name?: string; color?: string; description?: string }) {
-    return this.request<{ category: any }>(`/organizations/${organizationId}/categories/${categoryId}`, {
-      method: 'PATCH',
+  async updateCategory(
+    organizationId: string,
+    categoryId: string,
+    data: { name?: string; color?: string; description?: string }
+  ): Promise<{ category: ApiCategory }> {
+    if (this.demoMode) return demoApi.updateCategory(organizationId, categoryId, data) as unknown as Promise<{ category: ApiCategory }>;
+    return this.request<{ category: ApiCategory }>(`/organizations/${organizationId}/categories/${categoryId}`, {
+      method: "PATCH",
       body: JSON.stringify(data),
     });
   }
 
-  async deleteCategory(organizationId: string, categoryId: string) {
+  async deleteCategory(organizationId: string, categoryId: string): Promise<{ message: string }> {
+    if (this.demoMode) return demoApi.deleteCategory(organizationId, categoryId);
     return this.request<{ message: string }>(`/organizations/${organizationId}/categories/${categoryId}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
   }
 
-  // Users
-  async getOrganizationUsers(organizationId: string) {
-    return this.request<{ users: any[] }>(`/organizations/${organizationId}/users`);
+  /* ---------- users ---------- */
+
+  async getOrganizationUsers(organizationId: string): Promise<{ users: ApiUser[] }> {
+    if (this.demoMode) return demoApi.getOrganizationUsers(organizationId) as unknown as Promise<{ users: ApiUser[] }>;
+    return this.request<{ users: ApiUser[] }>(`/organizations/${organizationId}/users`);
   }
 
-  async searchUsers(organizationId: string, query: string) {
-    return this.request<{ users: any[] }>(`/organizations/${organizationId}/users/search?q=${encodeURIComponent(query)}`);
+  async searchUsers(organizationId: string, query: string): Promise<{ users: ApiUser[] }> {
+    if (this.demoMode) return demoApi.searchUsers(organizationId, query) as unknown as Promise<{ users: ApiUser[] }>;
+    return this.request<{ users: ApiUser[] }>(`/organizations/${organizationId}/users/search?q=${encodeURIComponent(query)}`);
   }
 }
 

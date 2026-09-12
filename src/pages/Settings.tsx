@@ -79,12 +79,12 @@ export default function Settings() {
         title: 'Organization updated',
         description: 'Your organization settings have been saved.',
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to save organization:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Failed to save organization settings',
+        description: error instanceof Error ? error.message : 'Failed to save organization settings',
       });
     } finally {
       setSaving(false);
@@ -111,12 +111,12 @@ export default function Settings() {
         title: 'Invitation sent',
         description: `Invitation sent to ${inviteEmail}`,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to invite member:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Failed to invite member',
+        description: error instanceof Error ? error.message : 'Failed to invite member',
       });
     } finally {
       setInviteLoading(false);

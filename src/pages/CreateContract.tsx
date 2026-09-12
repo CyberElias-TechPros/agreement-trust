@@ -49,7 +49,7 @@ export default function CreateContract() {
     executorId: '',
     observerIds: [] as string[],
     deadline: '',
-    priority: 'medium' as ContractPriority,
+    priority: 'medium' as string,
     categoryId: '',
     tags: '',
   });
@@ -76,7 +76,7 @@ export default function CreateContract() {
     }
   };
 
-  const update = (key: string, value: any) => setForm(prev => ({ ...prev, [key]: value }));
+  const update = (key: keyof typeof form, value: string | string[]) => setForm(prev => ({ ...prev, [key]: value }));
   const canProceed = step === 0 ? form.title && form.description : step === 1 ? form.executorId : true;
   const executor = users.find(u => u.id === form.executorId);
   const category = categories.find(c => c.id === form.categoryId);

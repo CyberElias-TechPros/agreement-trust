@@ -41,12 +41,12 @@ export default function Profile() {
         title: 'Profile updated',
         description: 'Your profile has been updated successfully.',
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to update profile:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Failed to update profile',
+        description: error instanceof Error ? error.message : 'Failed to update profile',
       });
     } finally {
       setLoading(false);
@@ -78,12 +78,12 @@ export default function Profile() {
         title: 'Password changed',
         description: 'Your password has been updated successfully.',
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to change password:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Failed to change password',
+        description: error instanceof Error ? error.message : 'Failed to change password',
       });
     } finally {
       setPasswordLoading(false);

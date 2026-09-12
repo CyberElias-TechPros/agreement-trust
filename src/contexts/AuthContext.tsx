@@ -2,12 +2,12 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import api from '@/lib/api';
 
 interface User {
-  [x: string]: ReactNode;
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   avatarUrl?: string;
+  [key: string]: unknown;
 }
 
 interface Organization {
@@ -23,6 +23,7 @@ interface AuthContextType {
   currentOrganization: Organization | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  demoMode: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, firstName: string, lastName: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -37,26 +38,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [currentOrganization, setCurrentOrganization] = useState<Organization | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [demoMode, setDemoMode] = useState(api.demoActive);
+
+  useEffect(() => {
+    const unsubscribe = api.subscribeDemo(setDemoMode);
+    return unsubscribe;
+  }, []);
+
+  const applySession = (userData: User, orgs: Organization[]) => {
+    setUser(userData);
+    setOrganizations(orgs);
+    const savedOrgId = localStorage.getItem('currentOrganizationId');
+    const currentOrg = orgs.find((o) => o.id === savedOrgId) || orgs[0];
+    if (currentOrg) {
+      setCurrentOrganization(currentOrg);
+      localStorage.setItem('currentOrganizationId', currentOrg.id);
+    }
+  };
 
   const refreshUser = async () => {
     try {
       const token = localStorage.getItem('accessToken');
-      if (!token) {
+      if (!token && !api.demoActive) {
         setIsLoading(false);
         return;
       }
-      
-      const { user: userData, organizations: orgs } = await api.getMe();
-      setUser(userData);
-      setOrganizations(orgs);
-      
-      // Set current organization from localStorage or first org
-      const savedOrgId = localStorage.getItem('currentOrganizationId');
-      const currentOrg = orgs.find((o: Organization) => o.id === savedOrgId) || orgs[0];
-      if (currentOrg) {
-        setCurrentOrganization(currentOrg);
-        localStorage.setItem('currentOrganizationId', currentOrg.id);
+
+      let data: { user: User; organizations: Organization[] };
+      try {
+        data = await api.getMe();
+      } catch (error) {
+        // Backend unreachable — the client has switched to demo mode.
+        if (api.demoActive) {
+          data = await api.getMe();
+        } else {
+          throw error;
+        }
       }
+      applySession(data.user, data.organizations);
     } catch (error) {
       console.error('Failed to refresh user:', error);
       localStorage.removeItem('accessToken');
@@ -68,26 +87,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refreshUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const login = async (email: string, password: string) => {
     const { user: userData, organizations: orgs } = await api.login(email, password);
-    setUser(userData);
-    setOrganizations(orgs);
-    
-    if (orgs.length > 0) {
-      const firstOrg = orgs[0];
-      setCurrentOrganization(firstOrg);
-      localStorage.setItem('currentOrganizationId', firstOrg.id);
-    }
+    applySession(userData, orgs);
   };
 
   const register = async (email: string, password: string, firstName: string, lastName: string) => {
     const { user: userData, organization: org } = await api.register(email, password, firstName, lastName);
-    setUser(userData);
-    setOrganizations([org]);
-    setCurrentOrganization(org);
-    localStorage.setItem('currentOrganizationId', org.id);
+    applySession(userData, [org]);
   };
 
   const logout = async () => {
@@ -118,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currentOrganization,
         isAuthenticated: !!user,
         isLoading,
+        demoMode,
         login,
         register,
         logout,

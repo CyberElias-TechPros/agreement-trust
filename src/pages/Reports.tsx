@@ -9,6 +9,7 @@ import api from '@/lib/api';
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
+import type { ApiContract } from '@/types/api';
 
 interface DashboardStats {
   totalContracts: number;
@@ -25,7 +26,7 @@ export default function Reports() {
   const organizationId = organizations?.[0]?.id;
   const [period, setPeriod] = useState('30d');
   const [stats, setStats] = useState<DashboardStats>({ totalContracts: 0, activeContracts: 0, completed: 0, pending: 0, overdue: 0, completionRate: 0 });
-  const [contracts, setContracts] = useState<any[]>([]);
+  const [contracts, setContracts] = useState<ApiContract[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
