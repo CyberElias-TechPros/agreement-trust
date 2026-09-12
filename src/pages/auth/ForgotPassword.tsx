@@ -1,69 +1,91 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { FileText, ArrowLeft, CheckCircle2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { KeyRound, MailCheck } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { usePageMeta } from "@/hooks/usePageMeta";
+import { AuthShell } from "./AuthShell";
 
 export default function ForgotPassword() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  usePageMeta(
+    "Reset your password — TaskContract",
+    "Request a password reset for your TaskContract account."
+  );
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => { setLoading(false); setSent(true); }, 800);
+    // In demo mode (and until a mail provider is configured) we confirm
+    // without disclosing whether the account exists — no enumeration.
+    await new Promise((r) => setTimeout(r, 700));
+    setLoading(false);
+    setSent(true);
   };
 
+  const inputClass =
+    "h-11 rounded-xl border-white/12 bg-white/[0.04] text-white placeholder:text-white/25 transition-all duration-300 focus-visible:border-indigo-bright/60 focus-visible:ring-2 focus-visible:ring-indigo-bright/25 hover:border-white/25";
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-background">
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="w-8 h-8 rounded-lg gradient-hero flex items-center justify-center">
-            <FileText className="w-4 h-4 text-primary-foreground" />
+    <AuthShell
+      footer={
+        <p className="mt-8 text-center text-[13px] text-white/45">
+          Remembered it after all?{" "}
+          <Link to="/login" className="font-semibold text-brass transition-colors hover:text-white">
+            Back to sign in
+          </Link>
+        </p>
+      }
+    >
+      {sent ? (
+        <div className="text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-brass/35 bg-brass/10">
+            <MailCheck className="h-6 w-6 text-brass" />
           </div>
-          <span className="font-bold text-foreground">TaskContract</span>
+          <h1 className="mt-6 font-display text-3xl italic text-white" style={{ fontVariationSettings: "'opsz' 48" }}>
+            Check your inbox
+          </h1>
+          <p className="mt-3 text-sm leading-relaxed text-white/45">
+            If an account exists for <span className="font-mono text-brass">{email || "that address"}</span>, a reset link is on its way. The link expires in 30 minutes.
+          </p>
         </div>
-
-        {sent ? (
-          <div className="text-center">
-            <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="w-6 h-6 text-success" />
+      ) : (
+        <>
+          <h1 className="font-display text-3xl italic text-white" style={{ fontVariationSettings: "'opsz' 48" }}>
+            Recover the key
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-white/45">
+            Enter your email and we'll send a reset link. The ledger itself won't forget you.
+          </p>
+          <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+            <div>
+              <label htmlFor="email" className="mb-2 block text-[13px] font-medium text-white/70">
+                Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className={inputClass}
+              />
             </div>
-            <h1 className="text-2xl font-bold text-foreground mb-2">Check your email</h1>
-            <p className="text-sm text-muted-foreground mb-6">
-              We sent a password reset link to <strong className="text-foreground">{email}</strong>
-            </p>
-            <Link to="/login">
-              <Button variant="outline" className="w-full">
-                <ArrowLeft className="w-4 h-4 mr-2" /> Back to Sign In
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <>
-            <h1 className="text-2xl font-bold text-foreground mb-1">Reset password</h1>
-            <p className="text-sm text-muted-foreground mb-8">Enter your email and we'll send you a reset link.</p>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="input-label">Email</label>
-                <Input type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="you@company.com" />
-              </div>
-              <Button type="submit" className="w-full gradient-hero text-primary-foreground border-0" disabled={loading}>
-                {loading ? 'Sending...' : 'Send Reset Link'}
-              </Button>
-            </form>
-
-            <p className="text-center text-sm text-muted-foreground mt-6">
-              <Link to="/login" className="text-primary font-medium hover:underline flex items-center justify-center gap-1">
-                <ArrowLeft className="w-3 h-3" /> Back to Sign In
-              </Link>
-            </p>
-          </>
-        )}
-      </motion.div>
-    </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white text-sm font-semibold text-[#0b0d1c] transition-all duration-300 hover:shadow-[0_8px_32px_rgba(255,255,255,0.25)] disabled:opacity-60"
+            >
+              <KeyRound className="h-4 w-4" />
+              {loading ? "Sending…" : "Send reset link"}
+            </button>
+          </form>
+        </>
+      )}
+    </AuthShell>
   );
 }

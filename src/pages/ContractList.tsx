@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, Filter, Plus, ArrowUpDown, Grid3X3, List } from 'lucide-react';
@@ -10,23 +10,11 @@ import { PriorityBadge } from '@/components/PriorityBadge';
 import { UserAvatar } from '@/components/UserAvatar';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/api';
-import type { ContractStatus } from '@/types/contracts';
+import type { ApiContract } from '@/types/api';
+import type { ContractStatus, ContractPriority } from '@/types/contracts';
 import { cn } from '@/lib/utils';
 
-interface Contract {
-  id: string;
-  contractNumber: string;
-  title: string;
-  description: string;
-  status: string;
-  priority: string;
-  deadline?: string;
-  category?: { id: string; name: string; color: string };
-  executor?: { id: string; firstName: string; lastName: string };
-  initiator: { id: string; firstName: string; lastName: string };
-  tags: string[];
-  createdAt: string;
-}
+type Contract = ApiContract;
 
 export default function ContractList() {
   const { user, organizations } = useAuth();
@@ -43,16 +31,11 @@ export default function ContractList() {
 
   const organizationId = organizations?.[0]?.id;
 
-  useEffect(() => {
-    if (organizationId) {
-      loadContracts();
-    }
-  }, [organizationId, statusFilter, priorityFilter]);
 
-  const loadContracts = async () => {
+  const loadContracts = useCallback(async () => {
     if (!organizationId) return;
     try {
-      const params: any = {};
+      const params: { status?: string; priority?: string; search?: string } = {};
       if (statusFilter !== 'all') params.status = statusFilter;
       if (priorityFilter !== 'all') params.priority = priorityFilter;
       if (search) params.search = search;
@@ -64,7 +47,13 @@ export default function ContractList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [organizationId, statusFilter, priorityFilter, search]);
+
+  useEffect(() => {
+    if (organizationId) {
+      loadContracts();
+    }
+  }, [organizationId, loadContracts]);
 
   const filtered = useMemo(() => {
     let result = [...contracts];
@@ -90,7 +79,7 @@ export default function ContractList() {
     }
 
     return result;
-  }, [contracts, search, statusFilter, priorityFilter, sortBy, filterParam, user]);
+  }, [contracts, search, sortBy, filterParam, user]);
 
   const pageTitle = filterParam === 'created' ? 'Created by Me' : filterParam === 'review' ? 'Awaiting Review' : filterParam === 'overdue' ? 'Overdue' : filterParam === 'archived' ? 'Archived' : 'All Contracts';
 
@@ -144,7 +133,7 @@ export default function ContractList() {
               <SelectItem value="critical">Critical</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+          <Select value={sortBy} onValueChange={(v: string) => setSortBy(v as "date" | "deadline" | "priority")}>
             <SelectTrigger className="w-[140px] bg-secondary/50 border-0"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="date">Newest First</SelectItem>
@@ -202,7 +191,7 @@ export default function ContractList() {
                   <StatusBadge status={c.status as ContractStatus} />
                   <div>{c.executor ? <UserAvatar user={{ id: c.executor.id, email: '', firstName: c.executor.firstName, lastName: c.executor.lastName, role: 'executor' }} size="sm" showName /> : <span className="text-xs text-muted-foreground">Unassigned</span>}</div>
                   <span className="text-xs text-muted-foreground">{c.deadline ? new Date(c.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
-                  <PriorityBadge priority={c.priority as any} />
+                  <PriorityBadge priority={c.priority as ContractPriority} />
                 </Link>
               </motion.div>
             ))}
@@ -222,7 +211,7 @@ export default function ContractList() {
                 <div className="flex items-center justify-between pt-3 border-t border-border">
                   <div className="flex items-center gap-2">
                     {c.executor && <UserAvatar user={{ id: c.executor.id, email: '', firstName: c.executor.firstName, lastName: c.executor.lastName, role: 'executor' }} size="sm" />}
-                    <PriorityBadge priority={c.priority as any} />
+                    <PriorityBadge priority={c.priority as ContractPriority} />
                   </div>
                   <span className="text-[11px] text-muted-foreground">
                     {c.deadline ? new Date(c.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No deadline'}

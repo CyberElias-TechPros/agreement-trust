@@ -1,25 +1,38 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Landing from "./pages/Landing";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
-import Dashboard from "./pages/Dashboard";
-import ContractList from "./pages/ContractList";
-import ContractDetail from "./pages/ContractDetail";
-import CreateContract from "./pages/CreateContract";
-import Reports from "./pages/Reports";
-import Settings from "./pages/Settings";
-import Profile from "./pages/Profile";
-import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 import { AppLayout } from "./components/AppLayout";
+import { DemoBanner } from "./components/DemoBanner";
 
-const queryClient = new QueryClient();
+// App workspace pages are lazy-loaded to keep the public
+// experience (landing/auth) fast on first paint.
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const ContractList = lazy(() => import("./pages/ContractList"));
+const ContractDetail = lazy(() => import("./pages/ContractDetail"));
+const CreateContract = lazy(() => import("./pages/CreateContract"));
+const Reports = lazy(() => import("./pages/Reports"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+
+function PageFallback() {
+  return (
+    <div className="flex h-64 items-center justify-center" aria-label="Loading page">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-b-transparent" />
+        <p className="text-xs text-muted-foreground">Opening the ledger…</p>
+      </div>
+    </div>
+  );
+}
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -27,8 +40,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-9 w-9 animate-spin rounded-full border-2 border-primary border-b-transparent" />
+          <p className="text-xs text-muted-foreground">Authenticating…</p>
+        </div>
       </div>
     );
   }
@@ -46,21 +62,12 @@ const AppRoutes = () => {
   return (
     <Routes>
       {/* Public */}
-      <Route 
-        path="/" 
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Landing />} 
-      />
-      <Route 
-        path="/login" 
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} 
-      />
-      <Route 
-        path="/register" 
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} 
-      />
+      <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Landing />} />
+      <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
 
-      {/* App (with sidebar layout) - Protected */}
+      {/* App (protected, sidebar layout) */}
       <Route
         element={
           <ProtectedRoute>
@@ -68,14 +75,70 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       >
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/contracts" element={<ContractList />} />
-        <Route path="/contracts/new" element={<CreateContract />} />
-        <Route path="/contracts/:id" element={<ContractDetail />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/notifications" element={<Notifications />} />
+        <Route
+          path="/dashboard"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Dashboard />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/contracts"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <ContractList />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/contracts/new"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <CreateContract />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/contracts/:id"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <ContractDetail />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Reports />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Settings />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Profile />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Notifications />
+            </Suspense>
+          }
+        />
       </Route>
 
       <Route path="*" element={<NotFound />} />
@@ -84,17 +147,16 @@ const AppRoutes = () => {
 };
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <TooltipProvider>
+    <Toaster />
+    <Sonner />
+    <BrowserRouter>
+      <AuthProvider>
+        <DemoBanner />
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
+  </TooltipProvider>
 );
 
 export default App;

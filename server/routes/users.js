@@ -2,20 +2,40 @@ import express from 'express';
 import { User } from '../models/index.js';
 import { authenticate } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { isId } from '../utils/validate.js';
 
 const router = express.Router();
 
-// Get all users in organization
-router.get('/:organizationId', authenticate, asyncHandler(async (req, res) => {
-  const { organizationId } = req.params;
+/** Escape user input before it is interpolated into a MongoDB $regex. */
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** The requester must be an active member of the organization. */
+async function requireOrgMember(organizationId, userId) {
+  if (!isId(organizationId)) return false;
   const { Membership } = await import('../models/index.js');
-  
-  // Get all members in the organization
-  const memberships = await Membership.find({ 
+  const membership = await Membership.findOne({
+    user: userId,
     organization: organizationId,
     status: 'active',
-  }).populate('user', 'firstName lastName email avatarUrl role').lean();
+  }).lean();
+  return Boolean(membership);
+}
+
+// Get all users in organization
+router.get('/', authenticate, asyncHandler(async (req, res) => {
+  const { organizationId } = req.params;
+
+  if (!(await requireOrgMember(organizationId, req.userId))) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  const { Membership } = await import('../models/index.js');
+
+  // Get all members in the organization
+  const memberships = await Membership.find({
+    organization: organizationId,
+    status: 'active',
+  }).populate('user', 'firstName lastName email avatarUrl').lean();
 
   const users = memberships.map(m => ({
     id: m.user._id,
@@ -30,18 +50,25 @@ router.get('/:organizationId', authenticate, asyncHandler(async (req, res) => {
 }));
 
 // Search users in organization
-router.get('/:organizationId/search', authenticate, asyncHandler(async (req, res) => {
+router.get('/search', authenticate, asyncHandler(async (req, res) => {
   const { organizationId } = req.params;
-  const { q, limit = 10 } = req.query;
+  const rawQ = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const rawLimit = Number.parseInt(String(req.query.limit ?? '10'), 10);
 
-  if (!q || q.length < 2) {
+  if (!(await requireOrgMember(organizationId, req.userId))) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  if (rawQ.length < 2) {
     return res.json({ users: [] });
   }
 
   const { Membership } = await import('../models/index.js');
-  
+  const q = escapeRegex(rawQ.slice(0, 100));
+  const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 10, 1), 50);
+
   // Get user IDs in the organization
-  const memberships = await Membership.find({ 
+  const memberships = await Membership.find({
     organization: organizationId,
     status: 'active',
   }).select('user').lean();
@@ -58,15 +85,23 @@ router.get('/:organizationId/search', authenticate, asyncHandler(async (req, res
     ],
   })
     .select('firstName lastName email avatarUrl')
-    .limit(parseInt(limit))
+    .limit(limit)
     .lean();
 
   res.json({ users });
 }));
 
 // Get user by ID
-router.get('/:organizationId/:userId', authenticate, asyncHandler(async (req, res) => {
-  const { userId } = req.params;
+router.get('/:userId', authenticate, asyncHandler(async (req, res) => {
+  const { organizationId, userId } = req.params;
+
+  if (!(await requireOrgMember(organizationId, req.userId))) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+
+  if (!isId(userId)) {
+    return res.status(400).json({ error: 'Validation failed', details: ['Invalid userId'] });
+  }
 
   const user = await User.findById(userId)
     .select('firstName lastName email avatarUrl')

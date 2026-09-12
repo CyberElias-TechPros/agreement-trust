@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Building2, Users, CreditCard, Shield, Palette, Bell, Trash2, Plus, Mail, ChevronRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -49,23 +49,33 @@ export default function Settings() {
   });
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (organizationId) {
-      loadMembers();
-    }
-  }, [organizationId]);
 
-  const loadMembers = async () => {
+  const loadMembers = useCallback(async () => {
     if (!organizationId) return;
     try {
       const data = await api.getOrganizationMembers(organizationId);
-      setMembers(data.members || []);
+      setMembers(
+        (data.members || []).map((m) => ({
+          id: m.id,
+          user: m.user
+            ? { id: m.user.id, email: m.user.email, firstName: m.user.firstName, lastName: m.user.lastName }
+            : { id: m.user?.id ?? '', email: 'pending@invite.local', firstName: 'Pending', lastName: 'Invite' },
+          role: m.role,
+          status: m.status || 'active',
+        }))
+      );
     } catch (error) {
       console.error('Failed to load members:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [organizationId]);
+
+  useEffect(() => {
+    if (organizationId) {
+      loadMembers();
+    }
+  }, [organizationId, loadMembers]);
 
   const handleSaveOrganization = async () => {
     if (!organizationId) return;
@@ -79,12 +89,12 @@ export default function Settings() {
         title: 'Organization updated',
         description: 'Your organization settings have been saved.',
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to save organization:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Failed to save organization settings',
+        description: error instanceof Error ? error.message : 'Failed to save organization settings',
       });
     } finally {
       setSaving(false);
@@ -111,12 +121,12 @@ export default function Settings() {
         title: 'Invitation sent',
         description: `Invitation sent to ${inviteEmail}`,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to invite member:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Failed to invite member',
+        description: error instanceof Error ? error.message : 'Failed to invite member',
       });
     } finally {
       setInviteLoading(false);
@@ -355,30 +365,22 @@ export default function Settings() {
               <h3 className="section-title">Two-Factor Authentication</h3>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-foreground">Enable 2FA</p>
-                  <p className="text-xs text-muted-foreground">Add an extra layer of security to your account</p>
+                  <p className="text-sm font-medium text-foreground">Enforce 2FA for all members</p>
+                  <p className="text-xs text-muted-foreground">Add an extra layer of security to your organization</p>
                 </div>
-                <Switch />
+                <div className="flex items-center gap-2.5">
+                  <span className="status-badge bg-warning/10 text-warning">On the roadmap</span>
+                  <Switch checked={false} disabled aria-label="Two-factor enforcement (not yet available)" />
+                </div>
               </div>
             </div>
 
             <div className="glass-card p-6 space-y-5">
               <h3 className="section-title">Session Management</h3>
-              <div className="space-y-3">
-                {[
-                  { device: 'Chrome on MacOS', location: 'Current session', current: true },
-                ].map((session, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
-                    <div>
-                      <p className="text-sm font-medium text-foreground flex items-center gap-2">
-                        {session.device}
-                        {session.current && <span className="status-badge bg-success/10 text-success text-[9px]">Current</span>}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{session.location}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Per-member session revocation ships with the next release. Member removal and role
+                changes take effect immediately for new requests.
+              </p>
             </div>
           </motion.div>
         </TabsContent>

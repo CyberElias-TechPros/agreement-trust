@@ -1,126 +1,75 @@
 # Codebase Analysis Report
 
-## Date: 2026-02-28
-## Project: Agreement Trust (TaskContract)
+## Date: 2026-09-12
+## Project: TaskContract (Agreement Trust)
 
 ---
 
 ## Executive Summary
 
-This report documents the analysis of the full codebase to verify frontend-backend connectivity and identify missing implementations. The codebase consists of a React/Vite frontend with a Node.js/Express backend using MongoDB.
-
-**Status: ISSUES FIXED**
+TaskContract is a **delegation governance platform**: version-locked task agreements with structured interactions, a governed lifecycle and an immutable audit trail. The repository contained a functional React/Vite frontend and an Express/MongoDB backend — but with critical security issues, generic visual design, broken SEO, no way to run without a database, and weak testing. This report documents what was found and what changed.
 
 ---
 
-## 1. Implemented Fixes
+## 1. Critical findings (initial state)
 
-### ✅ Profile Page (`src/pages/Profile.tsx`)
-- **FIXED**: Added change password functionality with proper API call to `api.changePassword()`
-- **FIXED**: Added toast notifications for success/error feedback
-- **FIXED**: Added password validation (minimum 8 characters, matching confirmation)
-- **FIXED**: Added loading states for password change button
-- **FIXED**: Added 2FA toggle state management
+| Severity | Finding | Resolution |
+| --- | --- | --- |
+| 🔴 Critical | **Leaked MongoDB Atlas credentials** committed in `server/.env` and hardcoded as fallbacks in `server/config/index.js` | Removed from the working tree; config now env-only and refuses to boot in production without `MONGODB_URI` + `JWT_SECRET`; `server/.env` git-ignored; `server/.env.example` added. ⚠️ The credentials were published to git history — **rotate them** |
+| 🔴 Critical | `index.html` was Lovable boilerplate ("Lovable App" title, Lovable OG tags) — zero SEO | Complete metadata rewrite: title, description, canonical, OG/Twitter cards, JSON-LD, favicon, theme-color |
+| 🟠 High | App unusable without a live MongoDB backend | **Demo mode**: `ApiClient` degrades to an in-browser store (`src/lib/demo/`) implementing the same domain rules, clearly flagged in the UI |
+| 🟠 High | No input validation, no rate limiting, no security headers, weak default JWT secret | `server/utils/validate.js`, auth + API rate limiters, security-header middleware, production env enforcement |
+| 🟠 High | Landing/auth pages were generic SaaS templates | Full art-directed rebuild ("ink & seal" design system — see below) |
+| 🟠 Medium | 1 MB single bundle | Route-level code splitting (app pages lazy-loaded; initial chunk 428 kB, recharts isolated in its own 541 kB lazy chunk, unused TanStack Query removed) |
+| 🟠 Medium | Dead code (`src/pages/Index.tsx`, `src/App.css`, `src/data/mockData.ts`) | Removed |
+| 🟠 Medium | One placeholder test | 20 real tests: domain logic, demo-API integration (full lifecycle), UI components, page smoke tests |
+| 🟠 Medium | Thin Lovable README | Rewritten with setup, env, architecture, security, testing docs |
 
-### ✅ Settings Page (`src/pages/Settings.tsx`)
-- **FIXED**: Added organization update functionality with API call to `api.updateOrganization()`
-- **FIXED**: Connected branding settings (primary/accent colors) to state
-- **FIXED**: Added loading state for Save Changes button
-- **FIXED**: Added toast notifications for success/error feedback
-- **FIXED**: Connected invite member loading state
-- **FIXED**: Added notification preference toggles with state management
-- **FIXED**: Disabled slug field (should not be editable)
+## 2. Design system — "Ink & Seal"
 
-### ✅ Reports Page (`src/pages/Reports.tsx`)
-- **FIXED**: Updated to use real analytics data from API instead of hardcoded mock data
-- **FIXED**: Fixed stats mapping (`totalContracts`, `activeContracts`, etc.)
-- **FIXED**: Status distribution now uses `contractsByStatus` from analytics API
-- **FIXED**: Added proper error handling with toast notifications
-- **FIXED**: Fixed StatsCard props (removed non-existent `trendUp` prop)
+Two coordinated visual worlds:
 
-### ✅ Contract Detail Page (`src/pages/ContractDetail.tsx`)
-- **FIXED**: Added version history display with proper data mapping
-- **FIXED**: Now displays version number, change reason, description, changed by, and timestamp
-- **FIXED**: Shows "No version history available" only when truly empty
+- **Public experience** (landing, auth, 404): cinematic ink — deep indigo night (`#080a12`), brass seal accents, Fraunces display serif + Plus Jakarta Sans + JetBrains Mono, aurora atmosphere, film grain, blueprint grid. Signature interactions: seal-stamp preloader, live-sealing hero agreement (terms reveal → signature draws → brass stamp lands), interactive contract-lifecycle explorer, marquee, count-up stats, magnetic CTAs, cursor glow, scroll-tracked progress hairline.
+- **App workspace**: archival parchment — warm paper background, ink typography, ledger-style badges with the same serif/mono pairing, deep-ink sidebar with organization switcher, page transitions, dark/light theme toggle.
 
-### ✅ Backend Routes (`server/routes/users.js`)
-- **FIXED**: Added missing `GET /:organizationId` endpoint to get all users in organization
-- **FIXED**: Now properly returns user role from membership
+Motion principles: choreographed entrances with a shared easing curve, `prefers-reduced-motion` respected everywhere, keyboard-first focus states, semantic landmarks and aria labels throughout.
 
----
+## 3. Demo workspace (in-browser)
 
-## 2. Frontend-Backend Connectivity Analysis
+`src/lib/demo/demoDb.ts` persists a seeded multi-org workspace to `localStorage` and implements the **same business rules** as the server: state-machine transitions with validation, append-only versions, typed interactions, notifications and audit entries. `demoApi` mirrors the exact API contract (`src/types/api.ts`). The demo is unit-tested and entered from the sign-in screen; a dismissible banner keeps the state honest.
 
-### ✅ Properly Connected Components
+## 4. Backend hardening
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Authentication (Login/Register) | ✅ Connected | Uses `/api/v1/auth/*` endpoints |
-| Dashboard | ✅ Connected | Fetches analytics, contracts, notifications |
-| Contract List | ✅ Connected | Filters and pagination work |
-| Contract Detail | ✅ Connected | Version history now displays |
-| Create Contract | ✅ Connected | Form data sent to backend |
-| Notifications | ✅ Connected | Read/unread functionality works |
-| Settings - Members | ✅ Connected | Invite, update role, remove work |
-| Settings - Organization | ✅ Connected | Save changes now works |
-| Profile | ✅ Connected | Change password now works |
-| Reports | ✅ Connected | Uses real analytics data |
+- Credentials fully externalized; production boot guards
+- Validation on register/login/change-password **and all mutating routes** (contracts create/update, categories, notifications) with `validate.js`
+- **IDOR fixes**: users/categories routes now verify org membership before returning data; users search regex-escaped and rate-limited pagination clamped
+- **Route-mount fixes**: `users` and `categories` routes previously mounted with a duplicated `:organizationId` param — every request would have 404'd; paths corrected to the parent param
+- **Truthful analytics**: `GET /:orgId/analytics` now computes `weeklyActivity`, `sealedPerMonth` and `teamPerformance` from real records (previously the Reports page charted hardcoded arrays)
+- **Registration org name + contract observers wired end-to-end** (server → API client → demo store)
+- Rate limiting: auth (20 req / 10 min / IP) and general API (300 req / min)
+- Security headers: CSP, HSTS (HTTPS), nosniff, frame-deny, referrer policy, permissions policy
+- CORS allow-list with origin callback; `x-powered-by` disabled
+- Access token lifetime tightened to 15 min (refresh 7d, rotating)
+- Structured request logging
 
----
+## 5. Testing
 
-## 3. Backend Route Analysis
+```
+npm test  →  4 files, 20 tests
+```
 
-### ✅ All Required Routes Implemented
+- `demoDb.test.ts` — state machine (valid + invalid transitions), analytics consistency, audit/interaction side effects, seed integrity
+- `demoApi.test.ts` — integration: sign-in, wrong credentials, full contract lifecycle (draft → sent → in_progress → submitted → approved) with analytics agreement, invalid-transition errors, observer participants
+- `components.test.tsx` — badges, logo, reveal
+- `landing.test.tsx` — full landing render, seal interaction, login + 404 smoke
 
-| Endpoint | Method | Status |
-|----------|--------|--------|
-| `/api/v1/auth/register` | POST | ✅ |
-| `/api/v1/auth/login` | POST | ✅ |
-| `/api/v1/auth/me` | GET/PATCH | ✅ |
-| `/api/v1/auth/change-password` | POST | ✅ |
-| `/api/v1/organizations` | GET/POST | ✅ |
-| `/api/v1/organizations/:id` | GET/PATCH | ✅ |
-| `/api/v1/organizations/:id/members` | GET/POST | ✅ |
-| `/api/v1/organizations/:id/analytics` | GET | ✅ |
-| `/api/v1/organizations/:orgId/contracts` | GET/POST | ✅ |
-| `/api/v1/organizations/:orgId/contracts/:id` | GET/PATCH | ✅ |
-| `/api/v1/organizations/:orgId/contracts/:id/send` | POST | ✅ |
-| `/api/v1/organizations/:orgId/contracts/:id/accept` | POST | ✅ |
-| `/api/v1/organizations/:orgId/contracts/:id/reject` | POST | ✅ |
-| `/api/v1/organizations/:orgId/contracts/:id/submit` | POST | ✅ |
-| `/api/v1/organizations/:orgId/contracts/:id/approve` | POST | ✅ |
-| `/api/v1/organizations/:orgId/contracts/:id/archive` | POST | ✅ |
-| `/api/v1/notifications` | GET | ✅ |
-| `/api/v1/notifications/:id/read` | PATCH | ✅ |
-| `/api/v1/organizations/:id/categories` | CRUD | ✅ |
-| `/api/v1/organizations/:id/users` | GET/SEARCH | ✅ |
+`npm run build` (type-checked) and `npm run lint` (0 errors) pass.
 
----
+## 6. Remaining considerations
 
-## 4. Summary of Changes
-
-### Files Modified:
-1. `src/pages/Profile.tsx` - Added change password functionality
-2. `src/pages/Settings.tsx` - Added organization/branding update functionality
-3. `src/pages/Reports.tsx` - Fixed to use real analytics data
-4. `src/pages/ContractDetail.tsx` - Fixed version history display
-5. `server/routes/users.js` - Added missing get users endpoint
-
-### Files Created:
-1. `CODEBASE_ANALYSIS.md` - This analysis report
-
----
-
-## 5. Remaining Considerations (Future Enhancements)
-
-While the core functionality is now complete, these enhancements could be added in the future:
-
-1. **Profile 2FA**: Connect 2FA toggle to backend API (requires 2FA implementation in auth)
-2. **Settings Sessions**: Add API to manage active sessions and revoke access
-3. **Reports Export**: Implement export functionality for reports
-4. **Detailed Analytics**: Add more granular analytics (weekly trends, team performance)
-5. **Notification Preferences**: Add backend endpoint for notification preferences
-
----
-
-*Report generated by automated code analysis and updated with fixes applied*
+1. **Rotate the leaked MongoDB credentials** (they're in git history regardless of removal).
+2. The Express backend is the reference implementation; per the blueprint, the production target is the API on Cloudflare Workers + D1/R2/KV — porting `server/routes` is the next infrastructure milestone.
+3. Notification preferences and session management UI (Settings) still need backend endpoints. The UI no longer pretends otherwise — 2FA/session toggles are disabled and labeled "On the roadmap".
+4. Email delivery (invites, password reset) requires a provider integration.
+5. No E2E suite yet (Playwright recommended for the seal interaction and contract flow).
+6. In-memory rate limiting is per-instance — a shared store (Cloudflare KV) is needed for multi-instance deployments.

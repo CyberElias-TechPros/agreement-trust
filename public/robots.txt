@@ -1,14 +1,14 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
+# TaskContract robots.txt
+# The application itself (app routes) is authenticated and excluded from
+# crawling by design; the public experience is fully crawlable.
 
 User-agent: *
 Allow: /
+Disallow: /dashboard
+Disallow: /contracts
+Disallow: /reports
+Disallow: /settings
+Disallow: /profile
+Disallow: /notifications
+
+Sitemap: https://taskcontract.app/sitemap.xml

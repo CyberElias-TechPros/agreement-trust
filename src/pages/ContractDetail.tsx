@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Copy, Clock, FileText, MessageSquare, GitBranch, Send, CheckCircle2, XCircle, AlertTriangle, Paperclip, ChevronDown } from 'lucide-react';
@@ -11,7 +11,8 @@ import { UserAvatar } from '@/components/UserAvatar';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/api';
-import type { InteractionType, ContractInteraction, ContractStatus, UserRole } from '@/types/contracts';
+import type { InteractionType, ContractInteraction, ContractStatus, ContractPriority, UserRole } from '@/types/contracts';
+import type { ApiContract, ApiInteraction, ApiVersion } from '@/types/api';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -29,46 +30,12 @@ const interactionTypeConfig: Record<string, { label: string; icon: React.Element
   system_note: { label: 'System', icon: FileText, color: 'text-muted-foreground' },
 };
 
-interface Contract {
-  id: string;
-  contractNumber: string;
-  title: string;
-  description: string;
-  currentStatus: string;
-  currentPriority: string;
-  deadline?: string;
-  sentAt?: string;
-  acceptedAt?: string;
-  completedAt?: string;
-  approvedAt?: string;
-  category?: { id: string; name: string; color: string };
-  initiator: { id: string; firstName: string; lastName: string };
-  executor?: { id: string; firstName: string; lastName: string };
-  createdAt: string;
-}
 
-interface Version {
-  id: string;
-  versionNumber: number;
-  description: string;
-  priority: string;
-  deadline?: string;
-  changedBy: { id: string; firstName: string; lastName: string };
-  changedAt: string;
-  changeReason?: string;
-}
 
-interface Interaction {
-  id: string;
-  author: { id: string; firstName: string; lastName: string };
-  interactionType: string;
-  content: string;
-  createdAt: string;
-}
-
-function InteractionCard({ interaction }: { interaction: Interaction }) {
+function InteractionCard({ interaction }: { interaction: ApiInteraction }) {
   const config = interactionTypeConfig[interaction.interactionType] || interactionTypeConfig.comment;
   const Icon = config.icon;
+  const author = interaction.author || { firstName: "Unknown", lastName: "" };
 
   return (
     <motion.div
@@ -81,7 +48,7 @@ function InteractionCard({ interaction }: { interaction: Interaction }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-foreground">{interaction.author.firstName} {interaction.author.lastName}</span>
+          <span className="text-sm font-medium text-foreground">{author.firstName} {author.lastName}</span>
           <span className={cn('text-[10px] font-semibold uppercase', config.color)}>{config.label}</span>
           <span className="text-[11px] text-muted-foreground ml-auto">
             {new Date(interaction.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -99,19 +66,14 @@ export default function ContractDetail() {
   const { organizations, user } = useAuth();
   const organizationId = organizations?.[0]?.id;
 
-  const [contract, setContract] = useState<Contract | null>(null);
-  const [interactions, setInteractions] = useState<Interaction[]>([]);
-  const [versions, setVersions] = useState<Version[]>([]);
+  const [contract, setContract] = useState<ApiContract | null>(null);
+  const [interactions, setInteractions] = useState<ApiInteraction[]>([]);
+  const [versions, setVersions] = useState<ApiVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
 
-  useEffect(() => {
-    if (organizationId && id) {
-      loadContract();
-    }
-  }, [organizationId, id]);
 
-  const loadContract = async () => {
+  const loadContract = useCallback(async () => {
     if (!organizationId || !id) return;
     try {
       const data = await api.getContract(organizationId, id);
@@ -123,7 +85,13 @@ export default function ContractDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, organizationId]);
+
+  useEffect(() => {
+    if (organizationId && id) {
+      loadContract();
+    }
+  }, [organizationId, id, loadContract]);
 
   const handleAddComment = async () => {
     if (!organizationId || !id || !newComment.trim()) return;
@@ -205,7 +173,7 @@ export default function ContractDetail() {
     ],
   };
 
-  const currentActions = statusActions[contract.currentStatus] || [];
+  const currentActions = statusActions[contract.currentStatus || contract.status || 'draft'] || [];
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -218,7 +186,7 @@ export default function ContractDetail() {
         {currentActions.map((a) => (
           <Button
             key={a.action}
-            variant={a.variant as any}
+            variant={a.variant as "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"}
             onClick={() => handleStatusChange(a.action)}
           >
             {a.label}
@@ -240,20 +208,20 @@ export default function ContractDetail() {
             </div>
             <h1 className="text-xl font-semibold text-foreground mb-2">{contract.title}</h1>
             <div className="flex items-center gap-3">
-              <StatusBadge status={contract.currentStatus as ContractStatus} />
-              <PriorityBadge priority={contract.currentPriority as any} />
+              <StatusBadge status={(contract.currentStatus || contract.status || 'draft') as ContractStatus} />
+              <PriorityBadge priority={(contract.currentPriority || contract.priority || 'medium') as ContractPriority} />
             </div>
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground mb-6">{contract.description}</p>
+        <p className="text-sm text-muted-foreground mb-6">{contract.description || contract.currentDescription || ''}</p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
             <p className="text-xs text-muted-foreground mb-1">Initiator</p>
             <div className="flex items-center gap-2">
-              <UserAvatar user={{ id: contract.initiator.id, email: '', firstName: contract.initiator.firstName, lastName: contract.initiator.lastName, role: 'manager' as UserRole }} size="sm" />
-              <span className="font-medium text-foreground">{contract.initiator.firstName} {contract.initiator.lastName}</span>
+              <UserAvatar user={{ id: (contract.initiator?.id || ''), email: '', firstName: (contract.initiator?.firstName || '—'), lastName: (contract.initiator?.lastName || ''), role: 'manager' as UserRole }} size="sm" />
+              <span className="font-medium text-foreground">{(contract.initiator?.firstName || '—')} {(contract.initiator?.lastName || '')}</span>
             </div>
           </div>
           <div>
@@ -333,11 +301,11 @@ export default function ContractDetail() {
                 </div>
                 <div className="flex justify-between py-2 border-b border-border">
                   <span className="text-muted-foreground">Status</span>
-                  <StatusBadge status={contract.currentStatus as ContractStatus} />
+                  <StatusBadge status={(contract.currentStatus || contract.status || 'draft') as ContractStatus} />
                 </div>
                 <div className="flex justify-between py-2 border-b border-border">
                   <span className="text-muted-foreground">Priority</span>
-                  <PriorityBadge priority={contract.currentPriority as any} />
+                  <PriorityBadge priority={(contract.currentPriority || contract.priority || 'medium') as ContractPriority} />
                 </div>
                 <div className="flex justify-between py-2 border-b border-border">
                   <span className="text-muted-foreground">Deadline</span>

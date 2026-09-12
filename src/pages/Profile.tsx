@@ -11,7 +11,7 @@ import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Profile() {
-  const { user, refreshUser } = useAuth();
+  const { user, currentOrganization, refreshUser } = useAuth();
   const [form, setForm] = useState({
     firstName: user?.firstName || '',
     lastName: user?.lastName || '',
@@ -24,7 +24,6 @@ export default function Profile() {
     confirmPassword: '',
   });
   const [passwordLoading, setPasswordLoading] = useState(false);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const { toast } = useToast();
 
   const update = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }));
@@ -41,12 +40,12 @@ export default function Profile() {
         title: 'Profile updated',
         description: 'Your profile has been updated successfully.',
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to update profile:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Failed to update profile',
+        description: error instanceof Error ? error.message : 'Failed to update profile',
       });
     } finally {
       setLoading(false);
@@ -78,12 +77,12 @@ export default function Profile() {
         title: 'Password changed',
         description: 'Your password has been updated successfully.',
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to change password:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: error.message || 'Failed to change password',
+        description: error instanceof Error ? error.message : 'Failed to change password',
       });
     } finally {
       setPasswordLoading(false);
@@ -119,7 +118,7 @@ export default function Profile() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-foreground">{user?.firstName} {user?.lastName}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{currentOrganization?.role || "Member"}</p>
                 </div>
               </div>
             </div>
@@ -200,34 +199,19 @@ export default function Profile() {
                   <p className="text-sm font-medium text-foreground">Enable 2FA</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Add an extra layer of security to your account</p>
                 </div>
-                <Switch 
-                  checked={twoFactorEnabled}
-                  onCheckedChange={setTwoFactorEnabled}
-                />
+                <div className="flex items-center gap-2.5">
+                  <span className="status-badge bg-warning/10 text-warning">On the roadmap</span>
+                  <Switch checked={false} disabled aria-label="Two-factor authentication (not yet available)" />
+                </div>
               </div>
             </div>
 
             <div className="glass-card p-6">
               <h3 className="section-title">Active Sessions</h3>
-              <div className="space-y-3">
-                {[
-                  { device: 'Chrome on MacOS', location: 'New York, US', current: true, lastActive: 'Now' },
-                  { device: 'Safari on iPhone', location: 'New York, US', current: false, lastActive: '2 hours ago' },
-                ].map((session, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
-                    <div>
-                      <p className="text-sm font-medium text-foreground flex items-center gap-2">
-                        {session.device}
-                        {session.current && <span className="status-badge bg-success/10 text-success text-[9px]">Current</span>}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{session.location} · {session.lastActive}</p>
-                    </div>
-                    {!session.current && (
-                      <Button variant="ghost" size="sm" className="text-destructive text-xs">Revoke</Button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Session management ships with the next release. Until then, signing out invalidates
+                your refresh token on the server immediately.
+              </p>
             </div>
           </motion.div>
         </TabsContent>

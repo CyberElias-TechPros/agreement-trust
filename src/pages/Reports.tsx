@@ -6,9 +6,10 @@ import { StatsCard } from '@/components/StatsCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/api';
-import { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { useState, useEffect, useCallback } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useToast } from '@/hooks/use-toast';
+import type { ApiContract } from '@/types/api';
 
 interface DashboardStats {
   totalContracts: number;
@@ -25,21 +26,19 @@ export default function Reports() {
   const organizationId = organizations?.[0]?.id;
   const [period, setPeriod] = useState('30d');
   const [stats, setStats] = useState<DashboardStats>({ totalContracts: 0, activeContracts: 0, completed: 0, pending: 0, overdue: 0, completionRate: 0 });
-  const [contracts, setContracts] = useState<any[]>([]);
+  const [contracts, setContracts] = useState<ApiContract[]>([]);
+  const [weeklyActivity, setWeeklyActivity] = useState<{ week: string; created: number; completed: number }[]>([]);
+  const [sealedPerMonth, setSealedPerMonth] = useState<{ month: string; sealed: number }[]>([]);
+  const [teamPerformance, setTeamPerformance] = useState<{ name: string; completed: number; avgDays: number; onTime: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (organizationId) {
-      loadData();
-    }
-  }, [organizationId, period]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!organizationId) return;
     try {
       const data = await api.getOrganizationAnalytics(organizationId);
-      const statsData = data.stats || {};
+      const statsData = data.stats;
       setStats({
         totalContracts: statsData.totalContracts || 0,
         activeContracts: statsData.activeContracts || 0,
@@ -50,6 +49,9 @@ export default function Reports() {
         contractsByStatus: data.contractsByStatus,
       });
       setContracts(data.recentContracts || []);
+      setWeeklyActivity(data.weeklyActivity || []);
+      setSealedPerMonth(data.sealedPerMonth || []);
+      setTeamPerformance(data.teamPerformance || []);
     } catch (error) {
       console.error('Failed to load analytics:', error);
       toast({
@@ -60,6 +62,37 @@ export default function Reports() {
     } finally {
       setLoading(false);
     }
+  }, [organizationId, toast]);
+
+  useEffect(() => {
+    if (organizationId) {
+      loadData();
+    }
+  }, [organizationId, loadData]);
+
+  const visibleWeeks = weeklyActivity.slice(period === '7d' ? -1 : period === '30d' ? -4 : -8);
+
+  const handleExport = () => {
+    const rows = [
+      ['Contract', 'Title', 'Status', 'Priority', 'Deadline', 'Created'],
+      ...contracts.map((c) => [
+        c.contractNumber,
+        c.title,
+        c.status,
+        c.priority,
+        c.deadline ? new Date(c.deadline).toISOString().slice(0, 10) : '',
+        c.createdAt ? new Date(c.createdAt).toISOString().slice(0, 10) : '',
+      ]),
+    ];
+    const csv = rows.map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `taskcontract-report-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Report exported', description: `${contracts.length} contracts written to CSV.` });
   };
 
   const statusDistribution = stats.contractsByStatus ? [
@@ -78,29 +111,7 @@ export default function Reports() {
     { name: 'Other', value: 0, color: 'hsl(217, 91%, 50%)' },
   ];
 
-  const weeklyData = [
-    { week: 'Week 1', created: 3, completed: 2 },
-    { week: 'Week 2', created: 5, completed: 3 },
-    { week: 'Week 3', created: 2, completed: 4 },
-    { week: 'Week 4', created: 4, completed: 2 },
-    { week: 'Week 5', created: 6, completed: 5 },
-    { week: 'Week 6', created: 3, completed: 3 },
-  ];
-
-  const completionTrend = [
-    { month: 'Jul', rate: 65 },
-    { month: 'Aug', rate: 70 },
-    { month: 'Sep', rate: 68 },
-    { month: 'Oct', rate: 75 },
-    { month: 'Nov', rate: 72 },
-    { month: 'Dec', rate: 78 },
-  ];
-
-  const teamPerformance = [
-    { name: 'Sarah Chen', completed: 8, avgDays: 5.2, onTime: 88 },
-    { name: 'James Wilson', completed: 12, avgDays: 4.1, onTime: 92 },
-    { name: 'Emma Jones', completed: 6, avgDays: 6.8, onTime: 75 },
-  ];
+  // Time series come from the API (or the demo store), computed from real records.
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -119,19 +130,27 @@ export default function Reports() {
               <SelectItem value="year">This year</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline">
-            <Download className="w-4 h-4 mr-2" /> Export
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="w-4 h-4 mr-2" /> Export CSV
           </Button>
         </div>
       </div>
 
-      {/* Stats Grid */}
+      {loading ? (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="shimmer h-28 rounded-xl bg-secondary" />
+          ))}
+        </div>
+      ) : (
+      /* Stats Grid */
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatsCard title="Total Contracts" value={stats.totalContracts} icon={FileText} variant="primary" delay={0} />
         <StatsCard title="Active" value={stats.activeContracts} icon={Clock} variant="warning" delay={0.05} />
         <StatsCard title="Completed" value={stats.completed} icon={CheckCircle2} variant="success" delay={0.1} />
         <StatsCard title="Pending Review" value={stats.pending} icon={TrendingUp} variant="default" delay={0.15} />
       </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid lg:grid-cols-2 gap-6 mb-8">
@@ -140,7 +159,7 @@ export default function Reports() {
           <h3 className="section-title mb-4">Weekly Contract Activity</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklyData}>
+              <BarChart data={visibleWeeks}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(215, 15%, 47%)" opacity={0.2} />
                 <XAxis dataKey="week" tick={{ fill: 'hsl(215, 15%, 47%)', fontSize: 12 }} />
                 <YAxis tick={{ fill: 'hsl(215, 15%, 47%)', fontSize: 12 }} />
@@ -193,18 +212,18 @@ export default function Reports() {
 
       {/* Completion Trend */}
       <div className="glass-card p-6 mb-8">
-        <h3 className="section-title mb-4">Completion Rate Trend</h3>
+        <h3 className="section-title mb-4">Contracts Sealed per Month</h3>
         <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={completionTrend}>
+            <BarChart data={sealedPerMonth}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(215, 15%, 47%)" opacity={0.2} />
               <XAxis dataKey="month" tick={{ fill: 'hsl(215, 15%, 47%)', fontSize: 12 }} />
-              <YAxis tick={{ fill: 'hsl(215, 15%, 47%)', fontSize: 12 }} domain={[50, 100]} />
+              <YAxis tick={{ fill: 'hsl(215, 15%, 47%)', fontSize: 12 }} allowDecimals={false} />
               <Tooltip
                 contentStyle={{ backgroundColor: 'hsl(220, 15%, 10%)', border: '1px solid hsl(215, 15%, 47%)', borderRadius: '8px' }}
               />
-              <Line type="monotone" dataKey="rate" name="Completion Rate %" stroke="hsl(160, 84%, 39%)" strokeWidth={2} dot={{ fill: 'hsl(160, 84%, 39%)', strokeWidth: 2 }} />
-            </LineChart>
+              <Bar dataKey="sealed" name="Sealed" fill="hsl(160, 84%, 39%)" radius={[4, 4, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
@@ -223,7 +242,14 @@ export default function Reports() {
               </tr>
             </thead>
             <tbody>
-              {teamPerformance.map((member) => (
+              {teamPerformance.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+                    Seal some contracts and team performance appears here.
+                  </td>
+                </tr>
+              ) : (
+                teamPerformance.map((member) => (
                 <tr key={member.name} className="border-b border-border/50">
                   <td className="py-3 px-4 text-sm font-medium text-foreground">{member.name}</td>
                   <td className="py-3 px-4 text-sm text-right text-foreground">{member.completed}</td>
@@ -234,7 +260,7 @@ export default function Reports() {
                     </span>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

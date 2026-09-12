@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Environment secrets — never commit real credentials
+.env
+.env.*
+!.env.example
+server/.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -22,3 +28,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# TypeScript build info cache
+*.tsbuildinfo
