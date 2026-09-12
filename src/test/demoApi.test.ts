@@ -14,7 +14,8 @@ describe("demoApi — end-to-end user flow", () => {
   it("signs in as the seeded demo user and loads their organizations", async () => {
     const login = await demoApi.login("alex.morgan@northwind.studio", "demo1234");
     expect(login.user.email).toBe("alex.morgan@northwind.studio");
-    expect(login.user.password).toBeUndefined();
+    // password hash must never leak through the API
+    expect((login.user as Record<string, unknown>).password).toBeUndefined();
     expect(login.organizations.map((o) => o.name)).toContain("Northwind Studio");
 
     const orgs = await demoApi.getOrganizations();
