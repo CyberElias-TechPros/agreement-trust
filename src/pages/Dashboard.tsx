@@ -205,14 +205,14 @@ export default function Dashboard() {
                       </div>
                       <div className="flex shrink-0 items-center gap-3">
                         <PriorityBadge priority={contract.currentPriority as ContractPriority} />
-                        {contract.responsibleExecutor && (
+                        {(contract.executor || contract.responsibleExecutor) && (
                           <UserAvatar
                             user={{
-                              id: contract.responsibleExecutor.firstName,
+                              id: (contract.executor || contract.responsibleExecutor)!.id,
                               email: "",
-                              firstName: contract.responsibleExecutor.firstName,
-                              lastName: contract.responsibleExecutor.lastName,
-                              avatarUrl: contract.responsibleExecutor.avatarUrl,
+                              firstName: (contract.executor || contract.responsibleExecutor)!.firstName,
+                              lastName: (contract.executor || contract.responsibleExecutor)!.lastName,
+                              avatarUrl: (contract.executor || contract.responsibleExecutor)!.avatarUrl,
                             }}
                             size="sm"
                           />

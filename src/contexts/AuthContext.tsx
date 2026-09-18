@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     const boot = async () => {
-      const token = localStorage.getItem('taskcontract.accessToken');
+      const token = api.getAccessToken();
       if (!token) {
         setLoading(false);
         return;
@@ -112,8 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.login(email, password);
+    if (res.requires2fa) {
+      throw new Error("Two-factor authentication required");
+    }
     applySession(res.user, res.organizations);
-    setCurrentOrganizationState(res.organizations.map(toOrg)[0] ?? null);
   }, [applySession]);
 
   const register = useCallback(
@@ -131,7 +133,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore — token cleared locally below either way
     }
-    localStorage.removeItem('taskcontract.accessToken');
     localStorage.removeItem(STORAGE_ORG_KEY);
     setUser(null);
     setOrganizations([]);

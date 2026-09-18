@@ -17,19 +17,20 @@ import { cn } from '@/lib/utils';
 type Contract = ApiContract;
 
 export default function ContractList() {
-  const { user, organizations } = useAuth();
+  const { user, currentOrganization } = useAuth();
   const [searchParams] = useSearchParams();
   const filterParam = searchParams.get('filter');
+  const searchParam = searchParams.get('search') || '';
   
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParam);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [sortBy, setSortBy] = useState<'date' | 'deadline' | 'priority'>('date');
 
-  const organizationId = organizations?.[0]?.id;
+  const organizationId = currentOrganization?.id;
 
 
   const loadContracts = useCallback(async () => {
@@ -59,7 +60,7 @@ export default function ContractList() {
     let result = [...contracts];
 
     // Apply URL filter
-    if (filterParam === 'created') result = result.filter(c => c.initiator.id === user?.id);
+    if (filterParam === 'created') result = result.filter(c => c.initiator?.id === user?.id);
     if (filterParam === 'review') result = result.filter(c => c.status === 'submitted');
     if (filterParam === 'overdue') result = result.filter(c => c.deadline && new Date(c.deadline) < new Date() && !['approved', 'archived'].includes(c.status));
     if (filterParam === 'archived') result = result.filter(c => c.status === 'archived');

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import type { ApiUser } from '@/types/api';
 import type { ContractPriority } from '@/types/contracts';
 
@@ -29,14 +30,15 @@ interface Category {
 
 export default function CreateContract() {
   const navigate = useNavigate();
-  const { organizations } = useAuth();
-  const organizationId = organizations?.[0]?.id;
+  const { currentOrganization } = useAuth();
+  const organizationId = currentOrganization?.id;
   
   const [step, setStep] = useState(0);
   const [users, setUsers] = useState<User[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
   
   const [form, setForm] = useState({
     title: '',
@@ -81,18 +83,26 @@ export default function CreateContract() {
     setSubmitting(true);
     try {
       const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean);
-      await api.createContract(organizationId, {
+      const { contract } = await api.createContract(organizationId, {
         title: form.title,
         description: form.description,
         deadline: form.deadline || undefined,
         priority: form.priority,
         categoryId: form.categoryId || undefined,
         executorId: form.executorId || undefined,
+        observerIds: form.observerIds,
         tags,
+        send: Boolean(form.executorId),
       });
-      navigate('/contracts');
+      toast({ title: form.executorId ? 'Contract sent' : 'Draft sealed', description: contract.contractNumber });
+      navigate(`/contracts/${contract.id}`);
     } catch (error) {
       console.error('Failed to create contract:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Could not create contract',
+        description: error instanceof Error ? error.message : 'Unknown error',
+      });
     } finally {
       setSubmitting(false);
     }
@@ -173,8 +183,8 @@ export default function CreateContract() {
                     <Select value={form.executorId} onValueChange={v => update('executorId', v)}>
                       <SelectTrigger className="bg-secondary/50 border-0"><SelectValue placeholder="Select team member..." /></SelectTrigger>
                       <SelectContent>
-                        {users.filter(u => u.role === 'executor' || u.role === 'manager').map(u => (
-                          <SelectItem key={u.id} value={u.id}>{u.firstName} {u.lastName} — {u.email}</SelectItem>
+                        {users.map(u => (
+                          <SelectItem key={u.id} value={u.id}>{u.firstName} {u.lastName} — {u.email}{u.role ? ` · ${u.role}` : ''}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

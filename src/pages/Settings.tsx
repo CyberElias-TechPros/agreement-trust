@@ -27,10 +27,10 @@ interface Member {
 
 export default function Settings() {
   const { organizations, currentOrganization } = useAuth();
-  const organizationId = organizations?.[0]?.id;
+  const organizationId = currentOrganization?.id || organizations?.[0]?.id;
   
-  const [orgName, setOrgName] = useState(organizations?.[0]?.name || '');
-  const [orgSlug, setOrgSlug] = useState(organizations?.[0]?.slug || '');
+  const [orgName, setOrgName] = useState(currentOrganization?.name || organizations?.[0]?.name || '');
+  const [orgSlug, setOrgSlug] = useState(currentOrganization?.slug || organizations?.[0]?.slug || '');
   const [branding, setBranding] = useState({
     primaryColor: '#3B82F6',
     accentColor: '#8B5CF6',
@@ -101,13 +101,19 @@ export default function Settings() {
     }
   };
 
-  const handleNotificationChange = (key: string, value: boolean) => {
-    setNotifications(prev => ({ ...prev, [key]: value }));
-    // TODO: Call API to save notification preferences
-    toast({
-      title: 'Preference saved',
-      description: 'Your notification preference has been updated.',
-    });
+  const handleNotificationChange = async (key: string, value: boolean) => {
+    const next = { ...notifications, [key]: value };
+    setNotifications(next);
+    try {
+      await api.updatePreferences(next);
+      toast({ title: 'Preference sealed', description: 'Notification preference recorded.' });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Could not save preference',
+      });
+    }
   };
 
   const handleInvite = async () => {
@@ -314,10 +320,23 @@ export default function Settings() {
               <h3 className="section-title">Current Plan</h3>
               <div className="flex items-center justify-between p-4 rounded-lg bg-secondary/30">
                 <div>
-                  <p className="font-semibold text-foreground">Free Plan</p>
-                  <p className="text-xs text-muted-foreground">Up to 5 users, 50 contracts</p>
+                  <p className="font-semibold text-foreground capitalize">{currentOrganization ? "Workspace plan" : "Free Plan"}</p>
+                  <p className="text-xs text-muted-foreground">Upgrade instantly — no card required in this environment.</p>
                 </div>
-                <Button variant="outline">Upgrade</Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    if (!organizationId) return;
+                    try {
+                      const res = await api.upgradePlan(organizationId, "pro");
+                      toast({ title: "Plan upgraded", description: res.message });
+                    } catch (e) {
+                      toast({ variant: "destructive", title: "Upgrade failed", description: e instanceof Error ? e.message : "" });
+                    }
+                  }}
+                >
+                  Upgrade to Pro
+                </Button>
               </div>
             </div>
 
@@ -325,8 +344,7 @@ export default function Settings() {
               <h3 className="section-title">Payment Method</h3>
               <div className="flex items-center gap-3 p-4 rounded-lg bg-secondary/30">
                 <CreditCard className="w-5 h-5 text-muted-foreground" />
-                <span className="text-sm">No payment method added</span>
-                <Button variant="outline" size="sm" className="ml-auto">Add Card</Button>
+                <span className="text-sm">Ledger billing is organisation-invoiced. No card on file.</span>
               </div>
             </div>
           </motion.div>
@@ -363,24 +381,15 @@ export default function Settings() {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
             <div className="glass-card p-6 space-y-5">
               <h3 className="section-title">Two-Factor Authentication</h3>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Enforce 2FA for all members</p>
-                  <p className="text-xs text-muted-foreground">Add an extra layer of security to your organization</p>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <span className="status-badge bg-warning/10 text-warning">On the roadmap</span>
-                  <Switch checked={false} disabled aria-label="Two-factor enforcement (not yet available)" />
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground">Members enable 2FA from their profile. Organisation-wide enforcement is available on Enterprise.</p>
             </div>
 
             <div className="glass-card p-6 space-y-5">
               <h3 className="section-title">Session Management</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Per-member session revocation ships with the next release. Member removal and role
-                changes take effect immediately for new requests.
+                Revoke individual devices from your profile. Role changes and member removal take effect on the next request.
               </p>
+              <Button variant="outline" onClick={() => window.location.assign("/profile")}>Open profile security</Button>
             </div>
           </motion.div>
         </TabsContent>

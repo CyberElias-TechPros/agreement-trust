@@ -15,8 +15,10 @@ export default function Login() {
   const [demoLoading, setDemoLoading] = useState(false);
   const [error, setError] = useState("");
   const [demoActive, setDemoActive] = useState(api.demoActive);
+  const [challenge, setChallenge] = useState("");
+  const [otp, setOtp] = useState("");
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, refreshUser } = useAuth();
 
   usePageMeta(
     "Sign in — TaskContract",
@@ -28,7 +30,18 @@ export default function Login() {
     setLoading(true);
     setError("");
     try {
-      await login(email, password);
+      if (challenge) {
+        await api.verify2fa(challenge, otp);
+        await refreshUser();
+        navigate("/dashboard");
+        return;
+      }
+      const res = await api.login(email, password);
+      if (res.requires2fa && res.challengeToken) {
+        setChallenge(res.challengeToken);
+        return;
+      }
+      await refreshUser();
       navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid credentials");
@@ -94,6 +107,12 @@ export default function Login() {
             className={inputClass}
           />
         </div>
+        {challenge && (
+          <div>
+            <label htmlFor="otp" className={labelClass}>Authenticator code</label>
+            <Input id="otp" inputMode="numeric" autoComplete="one-time-code" placeholder="123456" value={otp} onChange={(e) => setOtp(e.target.value)} className={inputClass} />
+          </div>
+        )}
         <div>
           <div className="flex items-center justify-between">
             <label htmlFor="password" className={labelClass}>

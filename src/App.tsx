@@ -8,9 +8,25 @@ import Landing from "./pages/Landing";
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
 import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
+import AcceptInvite from "./pages/auth/AcceptInvite";
 import NotFound from "./pages/NotFound";
 import { AppLayout } from "./components/AppLayout";
 import { DemoBanner } from "./components/DemoBanner";
+import { CommandPalette } from "./components/CommandPalette";
+import {
+  PricingPage,
+  AboutPage,
+  PrivacyPage,
+  TermsPage,
+  SecurityPage,
+  ContactPage,
+  HelpPage,
+  StatusPage,
+  DocsPage,
+  DpaPage,
+  ChangelogPage,
+} from "./pages/public/MarketingPages";
 
 // App workspace pages are lazy-loaded to keep the public
 // experience (landing/auth) fast on first paint.
@@ -22,6 +38,7 @@ const Reports = lazy(() => import("./pages/Reports"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Notifications = lazy(() => import("./pages/Notifications"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
 
 function PageFallback() {
   return (
@@ -64,8 +81,21 @@ const AppRoutes = () => {
       {/* Public */}
       <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Landing />} />
       <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
-      <Route path="/register" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Register />} />
+      <Route path="/register" element={isAuthenticated ? <Navigate to="/onboarding" replace /> : <Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/invite/:token" element={<AcceptInvite />} />
+      <Route path="/pricing" element={<PricingPage />} />
+      <Route path="/about" element={<AboutPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/security" element={<SecurityPage />} />
+      <Route path="/contact" element={<ContactPage />} />
+      <Route path="/help" element={<HelpPage />} />
+      <Route path="/status" element={<StatusPage />} />
+      <Route path="/docs" element={<DocsPage />} />
+      <Route path="/dpa" element={<DpaPage />} />
+      <Route path="/changelog" element={<ChangelogPage />} />
 
       {/* App (protected, sidebar layout) */}
       <Route
@@ -139,6 +169,14 @@ const AppRoutes = () => {
             </Suspense>
           }
         />
+        <Route
+          path="/onboarding"
+          element={
+            <Suspense fallback={<PageFallback />}>
+              <Onboarding />
+            </Suspense>
+          }
+        />
       </Route>
 
       <Route path="*" element={<NotFound />} />
@@ -153,6 +191,7 @@ const App = () => (
     <BrowserRouter>
       <AuthProvider>
         <DemoBanner />
+        <CommandPalette />
         <AppRoutes />
       </AuthProvider>
     </BrowserRouter>
