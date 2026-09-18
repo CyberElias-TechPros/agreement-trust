@@ -12,19 +12,21 @@ APP_URL = "https://taskcontract.app"
 [[d1_databases]]
 binding = "DB"
 database_name = "taskcontract"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "4e70cb3b-c5e8-4b75-ae23-b2f531699fd4"
 migrations_dir = "migrations"
 
 [[kv_namespaces]]
 binding = "KV"
-id = "00000000-0000-0000-0000-000000000000"
+id = "e530d1aa3f3b420bbfa3c35d8baafeb4"
 
-[[r2_buckets]]
-binding = "R2"
-bucket_name = "taskcontract-attachments"
+#[[r2_buckets]]
+ # binding = "R2"
+ # bucket_name = "taskcontract-attachments"
 
 [triggers]
 crons = ["15 * * * *"]
 
 [observability]
 enabled = true
+
+
