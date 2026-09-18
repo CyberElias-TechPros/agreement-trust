@@ -662,10 +662,27 @@ function FinalCta() {
 function Footer() {
   const year = new Date().getFullYear();
   const cols = [
-    { title: "Product", links: ["Features", "Workflow", "Pricing", "Changelog"] },
-    { title: "Company", links: ["About", "Security", "Contact"] },
-    { title: "Resources", links: ["Documentation", "API reference", "Status"] },
-    { title: "Legal", links: ["Privacy", "Terms", "DPA"] },
+    { title: "Product", links: [
+      { label: "Features", to: "/#features" },
+      { label: "Workflow", to: "/#workflow" },
+      { label: "Pricing", to: "/pricing" },
+      { label: "Changelog", to: "/changelog" },
+    ]},
+    { title: "Company", links: [
+      { label: "About", to: "/about" },
+      { label: "Security", to: "/security" },
+      { label: "Contact", to: "/contact" },
+    ]},
+    { title: "Resources", links: [
+      { label: "Help", to: "/help" },
+      { label: "Documentation", to: "/docs" },
+      { label: "Status", to: "/status" },
+    ]},
+    { title: "Legal", links: [
+      { label: "Privacy", to: "/privacy" },
+      { label: "Terms", to: "/terms" },
+      { label: "DPA", to: "/dpa" },
+    ]},
   ];
   return (
     <footer className="border-t border-white/8">
@@ -683,10 +700,10 @@ function Footer() {
                 <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/35">{c.title}</p>
                 <ul className="mt-4 space-y-2.5">
                   {c.links.map((l) => (
-                    <li key={l}>
-                      <a href="#top" className="text-[13px] text-white/50 transition-colors hover:text-white">
-                        {l}
-                      </a>
+                    <li key={l.label}>
+                      <Link to={l.to} className="text-[13px] text-white/50 transition-colors hover:text-white">
+                        {l.label}
+                      </Link>
                     </li>
                   ))}
                 </ul>

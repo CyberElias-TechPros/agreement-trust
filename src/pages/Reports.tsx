@@ -22,8 +22,8 @@ interface DashboardStats {
 }
 
 export default function Reports() {
-  const { organizations } = useAuth();
-  const organizationId = organizations?.[0]?.id;
+  const { currentOrganization } = useAuth();
+  const organizationId = currentOrganization?.id;
   const [period, setPeriod] = useState('30d');
   const [stats, setStats] = useState<DashboardStats>({ totalContracts: 0, activeContracts: 0, completed: 0, pending: 0, overdue: 0, completionRate: 0 });
   const [contracts, setContracts] = useState<ApiContract[]>([]);

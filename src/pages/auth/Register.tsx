@@ -41,7 +41,7 @@ export default function Register() {
     setError("");
     try {
       await register(form.email, form.password, form.firstName, form.lastName, form.orgName.trim());
-      navigate("/dashboard");
+      navigate("/onboarding");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {

@@ -192,30 +192,121 @@ export default function Profile() {
               </Button>
             </div>
 
-            <div className="glass-card p-6 space-y-5">
-              <h3 className="section-title flex items-center gap-2"><Key className="w-4 h-4" /> Two-Factor Authentication</h3>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Enable 2FA</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Add an extra layer of security to your account</p>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <span className="status-badge bg-warning/10 text-warning">On the roadmap</span>
-                  <Switch checked={false} disabled aria-label="Two-factor authentication (not yet available)" />
-                </div>
-              </div>
-            </div>
-
-            <div className="glass-card p-6">
-              <h3 className="section-title">Active Sessions</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Session management ships with the next release. Until then, signing out invalidates
-                your refresh token on the server immediately.
-              </p>
-            </div>
+            <TwoFactorCard />
+            <SessionsCard />
           </motion.div>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function TwoFactorCard() {
+  const { toast } = useToast();
+  const [secret, setSecret] = useState("");
+  const [otpauth, setOtpauth] = useState("");
+  const [code, setCode] = useState("");
+  const [backup, setBackup] = useState<string[]>([]);
+  const [password, setPassword] = useState("");
+
+  return (
+    <div className="glass-card p-6 space-y-4">
+      <h3 className="section-title flex items-center gap-2"><Key className="w-4 h-4" /> Two-factor authentication</h3>
+      <p className="text-sm text-muted-foreground">Protect the ledger with a TOTP app. Setup returns a secret you can scan or type.</p>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          onClick={async () => {
+            try {
+              const r = await api.setup2fa();
+              setSecret(r.secret);
+              setOtpauth(r.otpauthUrl);
+            } catch (e) {
+              toast({ variant: "destructive", title: "Setup failed", description: e instanceof Error ? e.message : "" });
+            }
+          }}
+        >
+          Begin setup
+        </Button>
+      </div>
+      {secret && (
+        <div className="space-y-2 rounded-lg bg-secondary/40 p-3">
+          <p className="font-mono text-xs break-all">{secret}</p>
+          <p className="text-[11px] text-muted-foreground break-all">{otpauth}</p>
+          <Input placeholder="6-digit code" value={code} onChange={(e) => setCode(e.target.value)} />
+          <Button
+            onClick={async () => {
+              try {
+                const r = await api.enable2fa(code);
+                setBackup(r.backupCodes);
+                toast({ title: "2FA enabled", description: "Store your backup codes." });
+              } catch (e) {
+                toast({ variant: "destructive", title: "Invalid code", description: e instanceof Error ? e.message : "" });
+              }
+            }}
+          >
+            Enable
+          </Button>
+        </div>
+      )}
+      {backup.length > 0 && (
+        <p className="font-mono text-xs">{backup.join(" · ")}</p>
+      )}
+      <div className="flex gap-2">
+        <Input type="password" placeholder="Password to disable" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <Button
+          variant="outline"
+          onClick={async () => {
+            try {
+              await api.disable2fa(password);
+              toast({ title: "2FA disabled" });
+            } catch (e) {
+              toast({ variant: "destructive", title: "Could not disable", description: e instanceof Error ? e.message : "" });
+            }
+          }}
+        >
+          Disable
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SessionsCard() {
+  const { toast } = useToast();
+  const [sessions, setSessions] = useState<{ id: string; userAgent?: string; ipAddress?: string; createdAt: string; current?: boolean; revoked?: boolean }[]>([]);
+
+  useEffect(() => {
+    api.getSessions().then((r) => setSessions(r.sessions)).catch(() => {});
+  }, []);
+
+  return (
+    <div className="glass-card p-6 space-y-3">
+      <h3 className="section-title">Active sessions</h3>
+      {sessions.map((s) => (
+        <div key={s.id} className="flex items-center justify-between rounded-lg bg-secondary/30 p-3 text-sm">
+          <div>
+            <p className="font-medium">{s.current ? "This device" : s.userAgent || "Session"}</p>
+            <p className="text-xs text-muted-foreground">{s.ipAddress} · {new Date(s.createdAt).toLocaleString()}</p>
+          </div>
+          {!s.current && !s.revoked && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={async () => {
+                await api.revokeSession(s.id);
+                setSessions((prev) => prev.map((x) => (x.id === s.id ? { ...x, revoked: true } : x)));
+                toast({ title: "Session revoked" });
+              }}
+            >
+              Revoke
+            </Button>
+          )}
+        </div>
+      ))}
+      <Button variant="outline" size="sm" onClick={() => api.revokeOtherSessions().then(() => toast({ title: "Other sessions revoked" }))}>
+        Revoke other sessions
+      </Button>
     </div>
   );
 }

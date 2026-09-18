@@ -4,11 +4,13 @@ import { KeyRound, MailCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { AuthShell } from "./AuthShell";
+import api from "@/lib/api";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resetUrl, setResetUrl] = useState("");
 
   usePageMeta(
     "Reset your password — TaskContract",
@@ -18,9 +20,12 @@ export default function ForgotPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // In demo mode (and until a mail provider is configured) we confirm
-    // without disclosing whether the account exists — no enumeration.
-    await new Promise((r) => setTimeout(r, 700));
+    try {
+      const res = await api.forgotPassword(email);
+      if (res.resetUrl) setResetUrl(res.resetUrl);
+    } catch {
+      /* still confirm — no enumeration */
+    }
     setLoading(false);
     setSent(true);
   };
@@ -50,6 +55,15 @@ export default function ForgotPassword() {
           <p className="mt-3 text-sm leading-relaxed text-white/45">
             If an account exists for <span className="font-mono text-brass">{email || "that address"}</span>, a reset link is on its way. The link expires in 30 minutes.
           </p>
+          {resetUrl && (
+            <p className="mt-4 rounded-xl border border-brass/30 bg-brass/10 p-3 text-left text-xs text-brass">
+              No mail provider in this environment — use{" "}
+              <Link to={resetUrl.startsWith("http") ? resetUrl.replace(/^https?:\/\/[^/]+/, "") : resetUrl} className="underline">
+                this reset link
+              </Link>
+              .
+            </p>
+          )}
         </div>
       ) : (
         <>

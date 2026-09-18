@@ -31,3 +31,7 @@ server/.env
 
 # TypeScript build info cache
 *.tsbuildinfo
+
+# Local Cloudflare Worker data
+worker/data/
+.wrangler/

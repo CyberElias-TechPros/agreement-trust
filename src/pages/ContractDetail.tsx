@@ -1,361 +1,486 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Copy, Clock, FileText, MessageSquare, GitBranch, Send, CheckCircle2, XCircle, AlertTriangle, Paperclip, ChevronDown } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { StatusBadge } from '@/components/StatusBadge';
-import { PriorityBadge } from '@/components/PriorityBadge';
-import { UserAvatar } from '@/components/UserAvatar';
-import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
-import api from '@/lib/api';
-import type { InteractionType, ContractInteraction, ContractStatus, ContractPriority, UserRole } from '@/types/contracts';
-import type { ApiContract, ApiInteraction, ApiVersion } from '@/types/api';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Clock,
+  Copy,
+  Download,
+  FileText,
+  GitBranch,
+  MessageSquare,
+  Send,
+  AlertTriangle,
+  XCircle,
+  Stamp,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { StatusBadge } from "@/components/StatusBadge";
+import { PriorityBadge } from "@/components/PriorityBadge";
+import { UserAvatar } from "@/components/UserAvatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import api from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+import { usePageMeta } from "@/hooks/usePageMeta";
+import type { ContractStatus, ContractPriority, UserRole } from "@/types/contracts";
+import type { ApiContract, ApiInteraction, ApiVersion } from "@/types/api";
 
-const interactionTypeConfig: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  progress_update: { label: 'Progress Update', icon: Clock, color: 'text-info' },
-  clarification_request: { label: 'Clarification', icon: MessageSquare, color: 'text-warning' },
-  clarification_response: { label: 'Response', icon: MessageSquare, color: 'text-info' },
-  scope_proposal: { label: 'Scope Change', icon: GitBranch, color: 'text-status-accepted' },
-  issue_report: { label: 'Issue', icon: AlertTriangle, color: 'text-destructive' },
-  issue_resolution: { label: 'Resolved', icon: CheckCircle2, color: 'text-success' },
-  submission: { label: 'Submission', icon: Send, color: 'text-status-submitted' },
-  approval: { label: 'Approved', icon: CheckCircle2, color: 'text-success' },
-  rejection: { label: 'Rejected', icon: XCircle, color: 'text-destructive' },
-  comment: { label: 'Comment', icon: MessageSquare, color: 'text-muted-foreground' },
-  system_note: { label: 'System', icon: FileText, color: 'text-muted-foreground' },
+const typeConfig: Record<string, { label: string; icon: typeof Clock; color: string }> = {
+  progress_update: { label: "Progress", icon: Clock, color: "text-info" },
+  clarification_request: { label: "Clarification", icon: MessageSquare, color: "text-warning" },
+  clarification_response: { label: "Response", icon: MessageSquare, color: "text-info" },
+  scope_proposal: { label: "Scope", icon: GitBranch, color: "text-status-accepted" },
+  issue_report: { label: "Issue", icon: AlertTriangle, color: "text-destructive" },
+  issue_resolution: { label: "Resolved", icon: CheckCircle2, color: "text-success" },
+  submission: { label: "Submission", icon: Send, color: "text-status-submitted" },
+  approval: { label: "Approved", icon: CheckCircle2, color: "text-success" },
+  rejection: { label: "Returned", icon: XCircle, color: "text-destructive" },
+  comment: { label: "Comment", icon: MessageSquare, color: "text-muted-foreground" },
+  system_note: { label: "System", icon: FileText, color: "text-muted-foreground" },
 };
 
-
-
-function InteractionCard({ interaction }: { interaction: ApiInteraction }) {
-  const config = interactionTypeConfig[interaction.interactionType] || interactionTypeConfig.comment;
-  const Icon = config.icon;
-  const author = interaction.author || { firstName: "Unknown", lastName: "" };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex gap-3 p-4"
-    >
-      <div className={cn('w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-secondary', config.color)}>
-        <Icon className="w-4 h-4" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-foreground">{author.firstName} {author.lastName}</span>
-          <span className={cn('text-[10px] font-semibold uppercase', config.color)}>{config.label}</span>
-          <span className="text-[11px] text-muted-foreground ml-auto">
-            {new Date(interaction.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-          </span>
-        </div>
-        <p className="text-sm text-foreground whitespace-pre-wrap">{interaction.content}</p>
-      </div>
-    </motion.div>
-  );
-}
+type Participant = { role: string; isLead?: boolean; user?: { id: string; firstName: string; lastName: string; email?: string; avatarUrl?: string } };
 
 export default function ContractDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { organizations, user } = useAuth();
-  const organizationId = organizations?.[0]?.id;
+  const { currentOrganization, user } = useAuth();
+  const organizationId = currentOrganization?.id;
+  const { toast } = useToast();
 
   const [contract, setContract] = useState<ApiContract | null>(null);
   const [interactions, setInteractions] = useState<ApiInteraction[]>([]);
   const [versions, setVersions] = useState<ApiVersion[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [audit, setAudit] = useState<{ id: string; action: string; createdAt: string; user?: { firstName: string; lastName: string } }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newComment, setNewComment] = useState('');
+  const [composerType, setComposerType] = useState("comment");
+  const [composer, setComposer] = useState("");
+  const [progress, setProgress] = useState(55);
+  const [note, setNote] = useState("");
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [sealed, setSealed] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [edit, setEdit] = useState({ title: "", description: "", changeReason: "" });
 
+  usePageMeta(contract ? `${contract.contractNumber} — TaskContract` : "Contract — TaskContract", contract?.title);
 
-  const loadContract = useCallback(async () => {
+  const load = useCallback(async () => {
     if (!organizationId || !id) return;
     try {
       const data = await api.getContract(organizationId, id);
       setContract(data.contract);
       setInteractions(data.interactions || []);
       setVersions(data.versions || []);
+      setParticipants((data.participants || []) as Participant[]);
+      setEdit({
+        title: data.contract.title,
+        description: data.contract.description || data.contract.currentDescription || "",
+        changeReason: "",
+      });
+      try {
+        const a = await api.getContractAudit(organizationId, id);
+        setAudit((a.auditLogs || []) as typeof audit);
+      } catch {
+        /* observers may not read audit */
+      }
     } catch (error) {
-      console.error('Failed to load contract:', error);
+      console.error(error);
     } finally {
       setLoading(false);
     }
   }, [id, organizationId]);
 
   useEffect(() => {
-    if (organizationId && id) {
-      loadContract();
-    }
-  }, [organizationId, id, loadContract]);
+    load();
+  }, [load]);
 
-  const handleAddComment = async () => {
-    if (!organizationId || !id || !newComment.trim()) return;
-    try {
-      await api.createInteraction(organizationId, id, {
-        interactionType: 'comment',
-        content: newComment,
-      });
-      setNewComment('');
-      loadContract();
-    } catch (error) {
-      console.error('Failed to add comment:', error);
-    }
-  };
+  const status = (contract?.currentStatus || contract?.status || "draft") as ContractStatus;
+  const isInitiator = contract?.initiator?.id === user?.id;
+  const isExecutor = (contract?.executor?.id || contract?.responsibleExecutor?.id) === user?.id;
+  const role = currentOrganization?.role || "";
 
-  const handleStatusChange = async (action: string) => {
+  const actions = useMemo(() => {
+    const out: { label: string; action: string; variant?: "default" | "destructive" | "outline"; needsNote?: boolean }[] = [];
+    if (status === "draft" && (isInitiator || ["owner", "admin", "manager"].includes(role))) {
+      out.push({ label: "Send contract", action: "send" });
+    }
+    if (status === "sent" && isExecutor) {
+      out.push({ label: "Accept", action: "accept" });
+      out.push({ label: "Decline", action: "reject", variant: "destructive", needsNote: true });
+    }
+    if (status === "accepted" && isExecutor) out.push({ label: "Start work", action: "start" });
+    if ((status === "accepted" || status === "in_progress" || status === "rejected") && isExecutor) {
+      out.push({ label: "Submit work", action: "submit", needsNote: true });
+    }
+    if (status === "submitted" && (isInitiator || ["owner", "admin", "manager"].includes(role))) {
+      out.push({ label: "Seal & approve", action: "approve" });
+      out.push({ label: "Request changes", action: "reject", variant: "outline", needsNote: true });
+    }
+    if (["approved", "rejected"].includes(status) && ["owner", "admin", "manager"].includes(role)) {
+      out.push({ label: "Reopen", action: "reopen", variant: "outline" });
+    }
+    if (!["archived"].includes(status) && ["owner", "admin"].includes(role)) {
+      out.push({ label: "Archive", action: "archive", variant: "outline" });
+    }
+    return out;
+  }, [status, isInitiator, isExecutor, role]);
+
+  const runAction = async (action: string, reason?: string) => {
     if (!organizationId || !id) return;
     try {
       switch (action) {
-        case 'send':
+        case "send":
           await api.sendContract(organizationId, id);
           break;
-        case 'accept':
+        case "accept":
           await api.acceptContract(organizationId, id);
           break;
-        case 'reject':
-          await api.rejectContract(organizationId, id);
+        case "reject":
+          await api.rejectContract(organizationId, id, reason);
           break;
-        case 'submit':
-          await api.submitContract(organizationId, id);
+        case "start":
+          await api.startContract(organizationId, id);
           break;
-        case 'approve':
+        case "submit":
+          await api.submitContract(organizationId, id, reason);
+          break;
+        case "approve":
           await api.approveContract(organizationId, id);
+          setSealed(true);
+          setTimeout(() => setSealed(false), 2800);
           break;
-        case 'archive':
+        case "archive":
           await api.archiveContract(organizationId, id);
           break;
+        case "reopen":
+          await api.reopenContract(organizationId, id);
+          break;
       }
-      loadContract();
-    } catch (error) {
-      console.error('Failed to update status:', error);
+      toast({ title: "Recorded", description: "The ledger updated." });
+      setPendingAction(null);
+      setNote("");
+      await load();
+    } catch (e) {
+      toast({ variant: "destructive", title: "Transition blocked", description: e instanceof Error ? e.message : "" });
     }
+  };
+
+  const post = async () => {
+    if (!organizationId || !id || !composer.trim()) return;
+    try {
+      await api.createInteraction(organizationId, id, {
+        interactionType: composerType,
+        content: composer,
+        progressPercentage: composerType === "progress_update" ? progress : undefined,
+      });
+      setComposer("");
+      await load();
+    } catch (e) {
+      toast({ variant: "destructive", title: "Could not post", description: e instanceof Error ? e.message : "" });
+    }
+  };
+
+  const saveVersion = async () => {
+    if (!organizationId || !id) return;
+    try {
+      await api.updateContract(organizationId, id, {
+        title: edit.title,
+        description: edit.description,
+        changeReason: edit.changeReason || (status === "draft" ? "Updated draft" : undefined),
+      });
+      setEditOpen(false);
+      toast({ title: "Version sealed", description: "A new version was appended." });
+      await load();
+    } catch (e) {
+      toast({ variant: "destructive", title: "Update failed", description: e instanceof Error ? e.message : "" });
+    }
+  };
+
+  const copyId = async () => {
+    if (!contract) return;
+    await navigator.clipboard.writeText(contract.contractNumber);
+    toast({ title: "Copied", description: contract.contractNumber });
+  };
+
+  const exportAudit = async () => {
+    if (!organizationId || !id || !contract) return;
+    const data = await api.exportContract(organizationId, id);
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${contract.contractNumber}-ledger.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto">
-        <div className="glass-card p-12 text-center">
-          <p className="text-muted-foreground">Loading contract...</p>
-        </div>
+      <div className="space-y-4">
+        <div className="shimmer h-8 w-40 rounded bg-secondary" />
+        <div className="shimmer h-64 rounded-2xl bg-secondary" />
       </div>
     );
   }
 
   if (!contract) {
     return (
-      <div className="max-w-4xl mx-auto">
-        <div className="glass-card p-12 text-center">
-          <p className="text-muted-foreground">Contract not found</p>
-          <Link to="/contracts">
-            <Button variant="outline" className="mt-4">Back to Contracts</Button>
-          </Link>
-        </div>
+      <div className="glass-card p-12 text-center">
+        <p className="text-muted-foreground">This contract was never sealed.</p>
+        <Link to="/contracts">
+          <Button variant="outline" className="mt-4">Back to the ledger</Button>
+        </Link>
       </div>
     );
   }
 
-  const statusActions: Record<string, { label: string; action: string; variant?: string }[]> = {
-    draft: [{ label: 'Send Contract', action: 'send', variant: 'default' }],
-    sent: [
-      { label: 'Accept', action: 'accept', variant: 'default' },
-      { label: 'Decline', action: 'reject', variant: 'destructive' },
-    ],
-    accepted: [{ label: 'Submit Work', action: 'submit', variant: 'default' }],
-    in_progress: [{ label: 'Submit Work', action: 'submit', variant: 'default' }],
-    submitted: [
-      { label: 'Approve', action: 'approve', variant: 'default' },
-      { label: 'Request Changes', action: 'reject', variant: 'destructive' },
-    ],
-  };
-
-  const currentActions = statusActions[contract.currentStatus || contract.status || 'draft'] || [];
+  const deadline = contract.deadline || contract.currentDeadline;
+  const overdue = deadline && new Date(deadline) < new Date() && !["approved", "archived", "rejected"].includes(status);
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Back
+    <div className="relative mx-auto max-w-5xl">
+      <AnimatePresence>
+        {sealed && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-[#080a12]/80 backdrop-blur-md"
+          >
+            <motion.div initial={{ scale: 2.2, rotate: -18, opacity: 0 }} animate={{ scale: 1, rotate: -6, opacity: 1 }} transition={{ type: "spring", stiffness: 260, damping: 18 }} className="text-center">
+              <div className="seal-stamp mx-auto flex h-36 w-36 items-center justify-center rounded-full border-4 border-brass text-brass shadow-[0_0_80px_rgba(217,164,65,0.45)]">
+                <Stamp className="h-16 w-16" />
+              </div>
+              <p className="mt-6 font-display text-4xl italic text-white">Sealed.</p>
+              <p className="mt-2 font-mono text-xs uppercase tracking-[0.2em] text-brass">{contract.contractNumber}</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> Back
         </button>
         <div className="flex-1" />
-        {currentActions.map((a) => (
+        <Button variant="ghost" size="sm" onClick={copyId} className="gap-1.5 font-mono text-xs">
+          <Copy className="h-3.5 w-3.5" /> {contract.contractNumber}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={exportAudit} className="gap-1.5">
+          <Download className="h-3.5 w-3.5" /> Export
+        </Button>
+        {actions.map((a) => (
           <Button
             key={a.action}
-            variant={a.variant as "default" | "destructive" | "outline" | "secondary" | "ghost" | "link"}
-            onClick={() => handleStatusChange(a.action)}
+            variant={a.variant || "default"}
+            onClick={() => (a.needsNote ? setPendingAction(a.action) : runAction(a.action))}
+            className={a.action === "approve" ? "gap-1.5 bg-gradient-to-r from-indigo to-[#7b5fd3] text-white" : ""}
           >
+            {a.action === "approve" && <Stamp className="h-4 w-4" />}
             {a.label}
           </Button>
         ))}
       </div>
 
-      {/* Contract Header */}
-      <div className="glass-card p-6 mb-6">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="font-mono text-xs text-muted-foreground">{contract.contractNumber}</span>
-              {contract.category && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: contract.category.color + '15', color: contract.category.color }}>
-                  {contract.category.name}
-                </span>
-              )}
-            </div>
-            <h1 className="text-xl font-semibold text-foreground mb-2">{contract.title}</h1>
-            <div className="flex items-center gap-3">
-              <StatusBadge status={(contract.currentStatus || contract.status || 'draft') as ContractStatus} />
-              <PriorityBadge priority={(contract.currentPriority || contract.priority || 'medium') as ContractPriority} />
-            </div>
+      {pendingAction && (
+        <div className="glass-card mb-6 p-5">
+          <p className="text-sm font-semibold">A note is required</p>
+          <Textarea className="mt-3" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason, summary, or evidence…" />
+          <div className="mt-3 flex gap-2">
+            <Button variant="outline" onClick={() => setPendingAction(null)}>Cancel</Button>
+            <Button disabled={!note.trim()} onClick={() => runAction(pendingAction, note)}>Record</Button>
           </div>
         </div>
+      )}
 
-        <p className="text-sm text-muted-foreground mb-6">{contract.description || contract.currentDescription || ''}</p>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Initiator</p>
-            <div className="flex items-center gap-2">
-              <UserAvatar user={{ id: (contract.initiator?.id || ''), email: '', firstName: (contract.initiator?.firstName || '—'), lastName: (contract.initiator?.lastName || ''), role: 'manager' as UserRole }} size="sm" />
-              <span className="font-medium text-foreground">{(contract.initiator?.firstName || '—')} {(contract.initiator?.lastName || '')}</span>
-            </div>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Executor</p>
-            {contract.executor ? (
-              <div className="flex items-center gap-2">
-                <UserAvatar user={{ id: contract.executor.id, email: '', firstName: contract.executor.firstName, lastName: contract.executor.lastName, role: 'executor' as UserRole }} size="sm" />
-                <span className="font-medium text-foreground">{contract.executor.firstName} {contract.executor.lastName}</span>
+      <div className="ledger-sheet glass-card overflow-hidden p-0">
+        <div className="relative border-b border-border bg-gradient-to-br from-card to-secondary/40 p-8">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="font-mono text-[11px] text-muted-foreground">{contract.contractNumber}</span>
+                {contract.category && (
+                  <span className="rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ backgroundColor: contract.category.color + "18", color: contract.category.color }}>
+                    {contract.category.name}
+                  </span>
+                )}
+                {overdue && <span className="status-badge border border-destructive/30 bg-destructive/10 text-destructive">Overdue</span>}
               </div>
-            ) : (
-              <span className="text-muted-foreground">Unassigned</span>
+              <h1 className="font-display text-3xl italic tracking-tight text-foreground">{contract.title}</h1>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <StatusBadge status={status} pulse={status === "sent" || status === "submitted"} />
+                <PriorityBadge priority={(contract.currentPriority || contract.priority || "medium") as ContractPriority} />
+                {typeof contract.progress === "number" && contract.progress > 0 && (
+                  <span className="font-mono text-[11px] text-muted-foreground">{contract.progress}%</span>
+                )}
+              </div>
+            </div>
+            {(isInitiator || ["owner", "admin", "manager"].includes(role)) && status !== "archived" && status !== "approved" && (
+              <Button variant="outline" size="sm" onClick={() => setEditOpen((v) => !v)}>
+                Edit (new version)
+              </Button>
             )}
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Deadline</p>
-            <span className="font-medium text-foreground">
-              {contract.deadline ? new Date(contract.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No deadline'}
-            </span>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Created</p>
-            <span className="font-medium text-foreground">
-              {new Date(contract.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </span>
+
+          {typeof contract.progress === "number" && contract.progress > 0 && (
+            <Progress value={contract.progress} className="mt-6 h-1.5" />
+          )}
+
+          <p className="mt-6 max-w-3xl whitespace-pre-wrap text-[15px] leading-relaxed text-foreground/80">
+            {contract.description || contract.currentDescription}
+          </p>
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-4">
+            {[
+              { label: "Initiator", user: contract.initiator },
+              { label: "Executor", user: contract.executor || contract.responsibleExecutor },
+              { label: "Deadline", text: deadline ? new Date(deadline).toLocaleString() : "None" },
+              { label: "Version", text: `v${versions[0]?.versionNumber || 1}` },
+            ].map((cell) => (
+              <div key={cell.label}>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{cell.label}</p>
+                {cell.user ? (
+                  <div className="mt-1">
+                    <UserAvatar user={{ id: cell.user.id, email: "", firstName: cell.user.firstName, lastName: cell.user.lastName, role: "manager" as UserRole }} size="sm" showName />
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm font-medium">{cell.text}</p>
+                )}
+              </div>
+            ))}
           </div>
         </div>
-      </div>
 
-      {/* Interactions */}
-      <div className="glass-card">
+        {editOpen && (
+          <div className="border-b border-border bg-secondary/30 p-6 space-y-3">
+            <Input value={edit.title} onChange={(e) => setEdit({ ...edit, title: e.target.value })} />
+            <Textarea rows={5} value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} />
+            {status !== "draft" && (
+              <Input placeholder="Change reason (required)" value={edit.changeReason} onChange={(e) => setEdit({ ...edit, changeReason: e.target.value })} />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+              <Button onClick={saveVersion}>Append version</Button>
+            </div>
+          </div>
+        )}
+
         <Tabs defaultValue="activity" className="w-full">
-          <TabsList className="bg-secondary/50 p-1 m-4 mb-0 w-auto">
+          <TabsList className="m-4 mb-0 w-auto bg-secondary/50 p-1">
             <TabsTrigger value="activity" className="text-xs">Activity</TabsTrigger>
-            <TabsTrigger value="details" className="text-xs">Details</TabsTrigger>
-            <TabsTrigger value="history" className="text-xs">History</TabsTrigger>
+            <TabsTrigger value="history" className="text-xs">Versions</TabsTrigger>
+            <TabsTrigger value="parties" className="text-xs">Parties</TabsTrigger>
+            <TabsTrigger value="audit" className="text-xs">Audit</TabsTrigger>
           </TabsList>
 
           <TabsContent value="activity">
             <div className="divide-y divide-border">
-              {interactions.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground text-sm">No activity yet</div>
-              ) : (
-                interactions.map((interaction) => (
-                  <InteractionCard key={interaction.id} interaction={interaction} />
-                ))
-              )}
+              {interactions.length === 0 && <p className="p-8 text-center text-sm text-muted-foreground">No activity yet — the first note becomes the memory.</p>}
+              {interactions.map((ix) => {
+                const cfg = typeConfig[ix.interactionType] || typeConfig.comment;
+                const Icon = cfg.icon;
+                return (
+                  <motion.div key={ix.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3 p-4">
+                    <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary", cfg.color)}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{ix.author?.firstName} {ix.author?.lastName}</span>
+                        <span className={cn("text-[10px] font-semibold uppercase", cfg.color)}>{cfg.label}</span>
+                        {ix.statusChangeFrom && ix.statusChangeTo && (
+                          <span className="font-mono text-[10px] text-muted-foreground">{ix.statusChangeFrom} → {ix.statusChangeTo}</span>
+                        )}
+                        <span className="ml-auto text-[11px] text-muted-foreground">
+                          {new Date(ix.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="whitespace-pre-wrap text-sm">{ix.content}</p>
+                      {typeof ix.progressPercentage === "number" && (
+                        <div className="mt-2 max-w-xs">
+                          <Progress value={ix.progressPercentage} className="h-1.5" />
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
-
-            {/* Add Comment */}
-            <div className="p-4 border-t border-border">
-              <div className="flex gap-3">
-                <UserAvatar user={user || { id: '', email: '', firstName: '', lastName: '', role: 'executor' }} size="sm" />
-                <div className="flex-1">
-                  <Textarea
-                    placeholder="Add a comment..."
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    className="min-h-[80px] bg-secondary/50 border-0"
-                  />
-                  <div className="flex justify-end mt-2">
-                    <Button onClick={handleAddComment} disabled={!newComment.trim()}>
-                      <MessageSquare className="w-4 h-4 mr-2" /> Post Comment
-                    </Button>
-                  </div>
+            {role !== "observer" && (
+              <div className="border-t border-border p-4">
+                <div className="mb-2 flex flex-wrap gap-2">
+                  <Select value={composerType} onValueChange={setComposerType}>
+                    <SelectTrigger className="w-[200px] bg-secondary/50"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="comment">Comment</SelectItem>
+                      <SelectItem value="progress_update">Progress update</SelectItem>
+                      <SelectItem value="clarification_request">Clarification</SelectItem>
+                      <SelectItem value="scope_proposal">Scope proposal</SelectItem>
+                      <SelectItem value="issue_report">Issue</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {composerType === "progress_update" && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <input type="range" min={0} max={100} value={progress} onChange={(e) => setProgress(Number(e.target.value))} />
+                      {progress}%
+                    </div>
+                  )}
+                </div>
+                <Textarea value={composer} onChange={(e) => setComposer(e.target.value)} placeholder="Typed, timestamped, permanent…" className="min-h-[88px]" />
+                <div className="mt-2 flex justify-end">
+                  <Button onClick={post} disabled={!composer.trim()} className="gap-2">
+                    <MessageSquare className="h-4 w-4" /> Post
+                  </Button>
                 </div>
               </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="details">
-            <div className="p-6">
-              <h3 className="font-semibold text-foreground mb-4">Contract Details</h3>
-              <div className="space-y-4 text-sm">
-                <div className="flex justify-between py-2 border-b border-border">
-                  <span className="text-muted-foreground">Contract Number</span>
-                  <span className="font-mono text-foreground">{contract.contractNumber}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-border">
-                  <span className="text-muted-foreground">Status</span>
-                  <StatusBadge status={(contract.currentStatus || contract.status || 'draft') as ContractStatus} />
-                </div>
-                <div className="flex justify-between py-2 border-b border-border">
-                  <span className="text-muted-foreground">Priority</span>
-                  <PriorityBadge priority={(contract.currentPriority || contract.priority || 'medium') as ContractPriority} />
-                </div>
-                <div className="flex justify-between py-2 border-b border-border">
-                  <span className="text-muted-foreground">Deadline</span>
-                  <span className="text-foreground">{contract.deadline ? new Date(contract.deadline).toLocaleDateString() : 'Not set'}</span>
-                </div>
-              </div>
-            </div>
+            )}
           </TabsContent>
 
           <TabsContent value="history">
-            <div className="p-6">
-              <h3 className="font-semibold text-foreground mb-4">Version History</h3>
-              {versions.length === 0 ? (
-                <div className="text-center text-muted-foreground text-sm py-8">
-                  No version history available
+            <div className="space-y-3 p-6">
+              {versions.map((v) => (
+                <div key={v.id} className="flex gap-4 rounded-xl bg-secondary/30 p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 font-display text-sm text-primary">v{v.versionNumber}</div>
+                  <div>
+                    <p className="text-sm font-medium">Version {v.versionNumber} · {new Date(v.changedAt).toLocaleString()}</p>
+                    {v.changeReason && <p className="text-xs text-muted-foreground">{v.changeReason}</p>}
+                    <p className="mt-2 line-clamp-3 text-sm">{v.description}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{v.changedBy?.firstName} {v.changedBy?.lastName}</p>
+                  </div>
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {versions.map((version) => (
-                    <div key={version.id} className="flex gap-4 p-4 rounded-lg bg-secondary/30">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                        <span className="text-sm font-bold text-primary">v{version.versionNumber}</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium text-foreground">
-                            Version {version.versionNumber}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(version.changedAt).toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric', 
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </span>
-                        </div>
-                        {version.changeReason && (
-                          <p className="text-xs text-muted-foreground mb-2">{version.changeReason}</p>
-                        )}
-                        <p className="text-sm text-foreground line-clamp-2">{version.description}</p>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Changed by {version.changedBy?.firstName} {version.changedBy?.lastName}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="parties">
+            <div className="grid gap-3 p-6 sm:grid-cols-2">
+              {participants.map((p, i) => (
+                <div key={i} className="flex items-center justify-between rounded-xl bg-secondary/30 p-3">
+                  {p.user && <UserAvatar user={{ id: p.user.id, email: p.user.email || "", firstName: p.user.firstName, lastName: p.user.lastName, role: "executor" as UserRole }} size="sm" showName />}
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{p.role}{p.isLead ? " · lead" : ""}</span>
                 </div>
-              )}
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="audit">
+            <div className="space-y-2 p-6">
+              {audit.length === 0 && <p className="text-sm text-muted-foreground">No audit entries yet, or you don’t have permission to read them.</p>}
+              {audit.map((a) => (
+                <div key={a.id} className="flex items-center justify-between border-b border-border/60 py-2 text-sm">
+                  <span className="font-mono text-xs">{a.action}</span>
+                  <span className="text-muted-foreground">{a.user?.firstName} {a.user?.lastName}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(a.createdAt).toLocaleString()}</span>
+                </div>
+              ))}
             </div>
           </TabsContent>
         </Tabs>

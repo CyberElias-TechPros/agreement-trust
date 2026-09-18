@@ -26,6 +26,7 @@ const routeTitles: Record<string, { title: string; subtitle: string }> = {
   "/settings": { title: "Settings", subtitle: "Organization & workspace" },
   "/profile": { title: "Profile", subtitle: "Your identity in the ledger" },
   "/notifications": { title: "Notifications", subtitle: "Everything that needs your attention" },
+  "/onboarding": { title: "Welcome", subtitle: "Seal your first agreement" },
 };
 
 const THEME_KEY = "taskcontract.theme";
