@@ -1,0 +1,16 @@
+name: tmp-cleanup-qa
+on: workflow_dispatch
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+    steps:
+      - name: Delete QA test org + contract + user
+        run: |
+          npx -y wrangler@latest d1 execute taskcontract --remote --command "DELETE FROM contracts WHERE id='tc_32495073d4534602';"
+          npx -y wrangler@latest d1 execute taskcontract --remote --command "DELETE FROM organizations WHERE id='org_18e2dc84d4a14017';"
+          npx -y wrangler@latest d1 execute taskcontract --remote --command "DELETE FROM sessions WHERE user_id='u_8fd009a6e83847b6';"
+          npx -y wrangler@latest d1 execute taskcontract --remote --command "DELETE FROM users WHERE id='u_8fd009a6e83847b6';"
+          npx -y wrangler@latest d1 execute taskcontract --remote --command "SELECT count(*) AS remaining FROM users WHERE id='u_8fd009a6e83847b6';"
