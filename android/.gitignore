@@ -1,0 +1,8 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+keystore/debug.jks
+keystore/release.jks
+/TaskContract-release.apk

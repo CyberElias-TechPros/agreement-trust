@@ -1,0 +1,82 @@
+name: Android
+
+on:
+  push:
+    paths:
+      - "android/**"
+      - "worker/**"
+      - ".github/workflows/android.yml"
+  pull_request:
+    paths:
+      - "android/**"
+      - "worker/**"
+      - ".github/workflows/android.yml"
+
+jobs:
+  test:
+    name: Domain & API tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install kotlinc
+        run: |
+          curl -sL -o /tmp/kotlin.zip https://github.com/JetBrains/kotlin/releases/download/v2.0.21/kotlin-compiler-2.0.21.zip
+          unzip -q /tmp/kotlin.zip -d /opt/kotlinc-dist
+
+      - name: Pure domain tests (JSON / crypto / TOTP / lifecycle / RBAC)
+        env:
+          KOTLIN_HOME: /opt/kotlinc-dist/kotlinc
+        run: bash android/tools/test.sh domain
+
+      - name: Start local worker backend
+        run: |
+          node worker/node-server.mjs > /tmp/worker.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8787/health && break || sleep 1; done
+
+      - name: RemoteApi E2E against worker
+        env:
+          KOTLIN_HOME: /opt/kotlinc-dist/kotlinc
+        run: bash android/tools/test.sh api
+
+      - name: Worker self-tests
+        run: node worker/test.mjs
+
+  build:
+    name: Assemble APK
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The runner image ships the Android SDK (cmdline-tools); no setup action
+      # needed — just accept licenses and ensure platform/build-tools 34.
+      - name: Install SDK 34 components
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Gradle assembleDebug
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: TaskContract-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

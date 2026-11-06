@@ -247,6 +247,31 @@ export function registerContracts(router) {
     return json({ contract: await hydrateContract(c.env.DB, fresh) });
   });
 
+  // Soft-delete a draft (owner/admin). Non-drafts must be archived instead —
+  // the audit trail of agreed work is never destroyed.
+  router.delete("/api/v1/organizations/:organizationId/contracts/:contractId", authenticate, async (c) => {
+    const m = await requireMembership(c.env.DB, c.userId, c.params.organizationId);
+    if (!can(m.role, "delete", "contract")) return err("Insufficient permissions", 403);
+    const row = await one(
+      c.env.DB,
+      "SELECT * FROM contracts WHERE id = ? AND organization_id = ?",
+      c.params.contractId,
+      c.params.organizationId
+    );
+    if (!row) return err("Contract not found", 404);
+    if (row.current_status !== "draft") return err("Only drafts can be deleted — archive completed work instead", 400);
+    await run(c.env.DB, "UPDATE contracts SET is_deleted = 1, updated_at = ? WHERE id = ?", nowIso(), row.id);
+    await writeAudit(c.env, {
+      userId: c.userId,
+      orgId: c.params.organizationId,
+      contractId: row.id,
+      action: "contract_deleted",
+      entityType: "contract",
+      entityId: row.id,
+    });
+    return json({ message: "Draft deleted" });
+  });
+
   const actionHandler = (action) => async (c) => {
     const m = await requireMembership(c.env.DB, c.userId, c.params.organizationId);
     const row = await one(
