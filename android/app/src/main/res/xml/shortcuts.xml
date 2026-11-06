@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="new_contract" android:enabled="true"
+        android:shortcutShortLabel="@string/app_name" android:shortcutLongLabel="@string/app_name">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="com.taskcontract.android"
+            android:targetClass="com.taskcontract.android.MainActivity" android:data="taskcontract://new" />
+    </shortcut>
+</shortcuts>

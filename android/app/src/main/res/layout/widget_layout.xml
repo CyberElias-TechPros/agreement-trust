@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="14dp" android:background="#0E101B">
+    <TextView android:id="@+id/widget_title" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="TaskContract" android:textColor="#D5A034" android:textSize="12sp" android:textStyle="bold" />
+    <TextView android:id="@+id/widget_line1" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="—" android:textColor="#F3F1ED" android:textSize="15sp" android:paddingTop="6dp" />
+    <TextView android:id="@+id/widget_line2" android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="" android:textColor="#9498A8" android:textSize="12sp" android:paddingTop="3dp" />
+</LinearLayout>

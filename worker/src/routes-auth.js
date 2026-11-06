@@ -19,8 +19,10 @@ import { ACCESS_TTL, REFRESH_TTL, authenticate, isEmail, isName, isPassword, jwt
 
 async function issueTokens(env, user, { ip, userAgent, sessionId } = {}) {
   const sid = sessionId || nid("sess");
-  const accessToken = await signJwt({ sub: user.id, typ: "access", sid }, jwtSecret(env), ACCESS_TTL);
-  const refreshToken = await signJwt({ sub: user.id, typ: "refresh", sid }, jwtSecret(env), REFRESH_TTL);
+  // jti guarantees unique tokens even when issued within the same second
+  // (rotation must always produce a fresh refresh token).
+  const accessToken = await signJwt({ sub: user.id, typ: "access", sid, jti: tokenHex(8) }, jwtSecret(env), ACCESS_TTL);
+  const refreshToken = await signJwt({ sub: user.id, typ: "refresh", sid, jti: tokenHex(16) }, jwtSecret(env), REFRESH_TTL);
   const refreshHash = await sha256Hex(refreshToken);
   const now = nowIso();
   const expires = new Date(Date.now() + REFRESH_TTL * 1000).toISOString();

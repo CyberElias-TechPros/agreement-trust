@@ -18,7 +18,7 @@ export function corsHeaders(request, env) {
   return {
     "Access-Control-Allow-Origin": acao,
     "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Authorization,Content-Type,X-Requested-With",
+    "Access-Control-Allow-Headers": "Authorization,Content-Type,X-Requested-With,X-HTTP-Method-Override,X-Client",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
@@ -92,8 +92,12 @@ export function createRouter() {
       }
       const url = new URL(request.url);
       const path = url.pathname.replace(/\/+$/, "") || "/";
+      // Some HTTP stacks (Android's HttpURLConnection) cannot send PATCH/DELETE
+      // with a body; allow POST + X-HTTP-Method-Override as the standard tunnel.
+      const override = (request.headers.get("X-HTTP-Method-Override") || "").toUpperCase();
+      const method = request.method === "POST" && ["PATCH", "PUT", "DELETE"].includes(override) ? override : request.method;
       for (const route of routes) {
-        if (route.method !== request.method) continue;
+        if (route.method !== method) continue;
         const m = path.match(route.re);
         if (!m) continue;
         const params = {};

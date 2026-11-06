@@ -7,6 +7,14 @@ TaskContract is a **delegation governance platform**. It replaces ambiguous dele
 
 The product blueprint lives in [`plan.md`](plan.md) — the single source of truth for domain rules, RBAC and the state machine.
 
+## 📱 Native Android app
+
+The full product is also a **fully native Android application** — Kotlin + Android framework APIs, **no WebView** — in [`android/`](android/README.md). It runs 100% offline as a private on-device workspace (same Northwind demo, one tap) or connects to the team server with an instant local mirror and an offline outbox that replays on reconnect. Contracts, lifecycle, versioning, typed interactions, RBAC, audit, reports, notifications, 2FA, biometric lock, widget, deep links and exports — all native.
+
+- **Install:** build `bash android/tools/build.sh release` → `android/build/TaskContract-release.apk` (Android 8+)
+- **Android Studio:** open `android/` (AGP 8.5.2 / Kotlin 2.0.21, zero external deps)
+- **Tests:** `bash android/tools/test.sh domain` (80 checks) and `bash android/tools/test.sh api` (46 E2E checks against the worker) — no emulator required
+
 ---
 
 ## Experience
